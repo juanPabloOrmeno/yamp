@@ -1,0 +1,21 @@
+{
+  "name": "yamp",
+  "productName": "YAMP",
+  "version": "0.2.0",
+  "description": "Mini reproductor retro para YouTube Music",
+  "main": "src/main.cjs",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.cjs",
+    "check": "node --check src/main.cjs && node --check src/chrome.cjs && node --check src/mpv.cjs && node --check src/native-player.cjs && node --check src/catalogue.cjs && node --check src/auth-session.cjs && node --check src/preload.cjs && node --check src/renderer.js"
+  },
+  "dependencies": {
+    "@jellybrick/mpris-service": "2.2.4",
+    "youtubei.js": "^18.3.0"
+  },
+  "devDependencies": {
+    "electron": "45.0.0",
+    "playwright-core": "1.61.1"
+  }
+}
