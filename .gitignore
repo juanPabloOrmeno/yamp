@@ -1,3 +1,6 @@
 node_modules/
 test-results/
 rea-evidence.json*
+android/.gradle/
+android/app/build/
+android/local.properties
