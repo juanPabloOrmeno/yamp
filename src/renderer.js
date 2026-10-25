@@ -1,5 +1,54 @@
 const $ = id => document.getElementById(id);
 let state = {}, listKey = '', filterKey = '', compact = false, messageUntil = 0;
+let localKey = '', managing = false;
+const selectedLocal = new Set();
+function renderLocal() {
+  const rows = state.localLibrary?.items || [];
+  const available = new Set(rows.map(row => row.id));
+  for (const id of selectedLocal) if (!available.has(id)) selectedLocal.delete(id);
+  const download = state.libraryDownload || {};
+  const busy = managing || state.localBusy || download.running;
+  $('download-library').disabled = busy;
+  $('stop-library-download').hidden = !download.running;
+  $('library-progress').textContent = download.message ? `${download.message} ${download.title || ''} · ${download.saved} guardadas · ${download.skipped} existentes · ${download.failed} errores · ${download.scanned} encontradas` : 'Guarda todas las canciones de tu biblioteca, playlists y álbumes.';
+  const key = JSON.stringify([rows, [...selectedLocal], busy]);
+  if (key !== localKey) {
+    localKey = key;
+    $('local-tracks').replaceChildren(...rows.map(row => {
+      const label = document.createElement('label'); label.className = 'local-track';
+      const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = selectedLocal.has(row.id); checkbox.disabled = busy;
+      checkbox.addEventListener('change', () => { if (checkbox.checked) selectedLocal.add(row.id); else selectedLocal.delete(row.id); renderLocal(); });
+      const name = document.createElement('span'); name.textContent = row.title;
+      const artist = document.createElement('small'); artist.textContent = row.artist; name.append(artist);
+      label.append(checkbox, name); return label;
+    }));
+  }
+  $('local-summary').textContent = rows.length ? `${selectedLocal.size} de ${rows.length} canciones seleccionadas` : 'Todavía no hay canciones guardadas.';
+  $('local-select-all').checked = rows.length > 0 && selectedLocal.size === rows.length;
+  $('local-select-all').indeterminate = selectedLocal.size > 0 && selectedLocal.size < rows.length;
+  $('local-select-all').disabled = busy || !rows.length;
+  $('backup-local').disabled = $('delete-local').disabled = busy || !selectedLocal.size;
+  $('restore-local').disabled = busy;
+}
+$('manage-local').addEventListener('click', () => { renderLocal(); $('local-message').textContent = ''; $('local-manager').showModal(); });
+$('close-manager').addEventListener('click', () => $('local-manager').close());
+for (const action of ['download-library', 'stop-library-download']) $(action).addEventListener('click', async () => {
+  const result = await command(action);
+  if (!result.ok) $('local-message').textContent = result.error;
+});
+$('local-select-all').addEventListener('change', event => {
+  selectedLocal.clear();
+  if (event.target.checked) for (const row of state.localLibrary?.items || []) selectedLocal.add(row.id);
+  renderLocal();
+});
+for (const action of ['backup-local', 'delete-local', 'restore-local']) $(action).addEventListener('click', async () => {
+  managing = true; renderLocal(); $('local-message').textContent = action === 'restore-local' ? 'Elige el respaldo que quieres restaurar…' : action === 'backup-local' ? 'Elige una carpeta para el respaldo…' : 'Eliminando…';
+  try {
+    const result = await command(action, [...selectedLocal]);
+    $('local-message').textContent = result.ok ? result.message || (action === 'restore-local' ? 'Restauración cancelada.' : 'Respaldo cancelado.') : result.error || 'No se pudo completar la operación.';
+    const updated = await command('state'); if (updated.state) render(updated.state);
+  } finally { managing = false; renderLocal(); }
+});
 function clock(seconds) {
   const n = Math.max(0, Math.floor(seconds || 0));
   return `${Math.floor(n / 60).toString().padStart(2, '0')}:${(n % 60).toString().padStart(2, '0')}`;
@@ -18,6 +67,7 @@ async function command(action, value) {
 }
 function render(next) {
   state = next;
+  if ($('local-manager').open) renderLocal();
   $('title').textContent = state.title || 'YAMP · TU MÚSICA, A TU MANERA';
   $('title').title = state.title || '';
   $('artist').textContent = state.artist || 'Busca una canción o abre tu biblioteca';
@@ -36,7 +86,7 @@ function render(next) {
   $('seek').disabled = !state.duration || state.loading;
   if (document.activeElement !== $('volume')) $('volume').value = Math.round((state.volume ?? 0.75) * 100);
   $('volume-value').textContent = state.muted ? 'MUTE' : `${Math.round((state.volume ?? 0.75) * 100)}%`;
-  if (Date.now() > messageUntil) message(state.error || (state.authenticating ? 'Inicia sesión en Chrome y pulsa GUARDAR SESIÓN.' : state.loading ? 'Resolviendo audio… puedes detenerlo o elegir otra canción.' : state.catalogueBusy ? 'Cargando catálogo…' : 'AUDIO NATIVO · SIN NAVEGADOR · ESPACIO: PLAY/PAUSA'), !!state.error);
+   if (Date.now() > messageUntil) message(state.error || state.cacheError || (state.authenticating ? 'Inicia sesión en Chrome y pulsa GUARDAR SESIÓN.' : state.loading ? 'Resolviendo audio… puedes detenerlo o elegir otra canción.' : state.saving ? `Guardando ${state.saving} canción(es) para escuchar sin conexión…` : state.local ? 'AUDIO LOCAL · SIN CONEXIÓN' : state.catalogueBusy ? 'Cargando catálogo…' : 'AUDIO NATIVO · SIN NAVEGADOR · ESPACIO: PLAY/PAUSA'), !!(state.error || state.cacheError));
   const view = state.catalogue || { items: [], title: 'CATÁLOGO', filters: [] };
   const isQueue = state.mode === 'queue';
   const rows = isQueue ? state.queue || [] : view.items;
@@ -67,11 +117,12 @@ function render(next) {
       content.append(title, detail); button.append(number, content);
       button.title = [track.title, track.artist].filter(Boolean).join(' — ');
       const selection = { index, revision: view.revision };
-      button.addEventListener('click', () => isQueue ? command('queue', index) : command('open-item', selection));
+      const local = state.mode === 'local';
+      button.addEventListener('click', () => isQueue ? command('queue', index) : command(local ? 'open-local' : 'open-item', selection));
       li.append(button);
       if (!isQueue && ['song', 'video'].includes(track.kind)) {
         const add = document.createElement('button'); add.className = 'add-item'; add.textContent = '+'; add.title = 'Añadir a la cola';
-        add.addEventListener('click', () => command('enqueue', selection)); li.append(add);
+        add.addEventListener('click', () => command(local ? 'enqueue-local' : 'enqueue', selection)); li.append(add);
       }
       return li;
     }));
@@ -80,7 +131,7 @@ function render(next) {
   }
 }
 document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', async () => {
-  if (compact && ['music', 'home', 'library'].includes(button.dataset.action)) await expand();
+  if (compact && ['music', 'home', 'library', 'local'].includes(button.dataset.action)) await expand();
   command(button.dataset.action);
 }));
 async function expand() {

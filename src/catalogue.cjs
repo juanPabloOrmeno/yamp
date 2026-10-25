@@ -62,6 +62,41 @@ class Catalogue {
     if (!this.authenticated) throw new Error('Pulsa CUENTA, inicia sesión y después GUARDAR SESIÓN.');
     await this.show('MI BIBLIOTECA', () => yt.music.getLibrary());
   }
+  async *libraryTracks(signal, onError = () => {}) {
+    const yt = await this.client();
+    if (!this.authenticated) throw new Error('Pulsa CUENTA, inicia sesión y después GUARDAR SESIÓN.');
+    signal.throwIfAborted();
+    const root = await yt.music.getLibrary();
+    const pending = [() => Promise.resolve(root)];
+    for (const filter of root.filters || []) pending.push(() => root.applyFilter(filter));
+    const songs = new Set(), containers = new Set();
+    for (let index = 0; index < pending.length; index++) {
+      signal.throwIfAborted();
+      try {
+        let page = await pending[index]();
+        while (page) {
+          signal.throwIfAborted();
+          for (const row of collect(page)) {
+            if (['song', 'video'].includes(row.kind)) {
+              if (!songs.has(row.id)) { songs.add(row.id); yield row; }
+            } else if (['playlist', 'album'].includes(row.kind)) {
+              const id = row.kind === 'playlist' ? row.id.replace(/^VL/, '') : row.id;
+              const key = `${row.kind}:${id}`;
+              if (!containers.has(key)) {
+                containers.add(key);
+                pending.push(() => row.kind === 'playlist' ? yt.music.getPlaylist(id) : yt.music.getAlbum(id));
+              }
+            }
+          }
+          signal.throwIfAborted();
+          page = page.has_continuation ? await page.getContinuation() : null;
+        }
+      } catch (error) {
+        signal.throwIfAborted();
+        onError();
+      }
+    }
+  }
   async filter(name) {
     if (!this.view.filters.includes(name) || typeof this.page?.applyFilter !== 'function') throw new Error('Filtro no disponible.');
     await this.show(name.toUpperCase(), () => this.page.applyFilter(name));

@@ -1,0 +1,97 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const AudioCache = require('../src/audio-cache.cjs');
+const { NativePlayer } = require('../src/native-player.cjs');
+
+const track = { id: 'offline0001', kind: 'song', title: 'Guardada', artist: 'Prueba' };
+const audio = { url: 'https://audio.example/song', duration: 5 };
+function wav() {
+  const data = Buffer.alloc(44 + 8000 * 5 * 2);
+  data.write('RIFF'); data.writeUInt32LE(data.length - 8, 4); data.write('WAVEfmt ', 8);
+  data.writeUInt32LE(16, 16); data.writeUInt16LE(1, 20); data.writeUInt16LE(1, 22);
+  data.writeUInt32LE(8000, 24); data.writeUInt32LE(16000, 28); data.writeUInt16LE(2, 32); data.writeUInt16LE(16, 34);
+  data.write('data', 36); data.writeUInt32LE(data.length - 44, 40); return data;
+}
+test('saved audio survives restart and plays with no network or resolver', async t => {
+  const directory = await fs.mkdtemp('/tmp/opencode/yamp-offline-');
+  const cache = new AudioCache(directory);
+  let player;
+  t.after(async () => { await player?.close(); await cache.close(); await fs.rm(directory, { recursive: true, force: true }); });
+  await cache.start();
+  let downloads = 0;
+  t.mock.method(globalThis, 'fetch', async () => { downloads++; return new Response(wav()); });
+  const first = cache.save(track, audio);
+  assert.equal(cache.save(track, audio), first, 'concurrent requests share one download');
+  await first;
+  assert.equal(downloads, 1);
+  assert.equal(cache.view.items.length, 1);
+  await cache.close();
+  t.mock.method(globalThis, 'fetch', async () => { throw new Error('Network must not be used'); });
+  player = new NativePlayer(directory, () => { throw new Error('YouTube must not be used'); });
+  await player.start(); await player.run('volume', 0);
+  assert.equal(player.cache.view.items[0].title, track.title);
+  player.playRows(player.cache.view.items, track.id);
+  await player.loadingTask;
+  const deadline = Date.now() + 5000;
+  while (!player.snapshot().time && !player.snapshot().error && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(player.snapshot().error, '');
+  assert.equal(player.snapshot().local, true);
+  assert.ok(player.snapshot().time > 0, 'real mpv advances using the local file');
+  await fs.truncate(player.cache.file(track.id), 1);
+  assert.equal(await player.cache.lookup(track.id), null, 'damaged files are not cache hits');
+});
+
+test('failed or incomplete downloads stay out of the library and can be retried', async t => {
+  const directory = await fs.mkdtemp('/tmp/opencode/yamp-cache-');
+  const cache = new AudioCache(directory);
+  t.after(async () => { await cache.close(); await fs.rm(directory, { recursive: true, force: true }); });
+  await cache.start();
+  t.mock.method(globalThis, 'fetch', async () => new Response('partial', { headers: { 'content-length': '1000' } }));
+  await cache.save(track, audio);
+  assert.equal(await cache.lookup(track.id), null);
+  assert.equal(cache.view.items.length, 0);
+  assert.deepEqual(await fs.readdir(cache.directory), []);
+  assert.ok(cache.error);
+  t.mock.method(globalThis, 'fetch', async () => new Response(wav()));
+  await cache.save(track, audio);
+  assert.equal(cache.error, '');
+  assert.ok(await cache.lookup(track.id));
+  assert.throws(() => cache.file('../escape'));
+});
+
+test('backups preserve audio and metadata independently of local deletion', async t => {
+  const directory = await fs.mkdtemp('/tmp/opencode/yamp-management-');
+  const cache = new AudioCache(directory);
+  t.after(async () => { await cache.close(); await fs.rm(directory, { recursive: true, force: true }); });
+  await cache.start();
+  t.mock.method(globalThis, 'fetch', async () => new Response(wav()));
+  await cache.save(track, audio);
+  await assert.rejects(cache.remove(['../escape']));
+  const backup = await cache.backup([track.id], directory);
+  assert.equal(backup.count, 1);
+  assert.deepEqual(await fs.readFile(path.join(backup.folder, `${track.id}.audio`)), wav());
+  assert.equal(JSON.parse(await fs.readFile(path.join(backup.folder, `${track.id}.json`))).title, track.title);
+  assert.equal(await cache.remove([track.id]), 1);
+  assert.equal(cache.view.items.length, 0);
+  assert.equal(await cache.lookup(track.id), null);
+  assert.deepEqual(await fs.readdir(cache.directory), []);
+  assert.deepEqual(await fs.readFile(path.join(backup.folder, `${track.id}.audio`)), wav(), 'deletion does not affect backups');
+  const reopened = new AudioCache(directory);
+  await reopened.start();
+  assert.equal(reopened.view.items.length, 0);
+  assert.deepEqual(await reopened.restore(backup.folder), { restored: 1, skipped: 0, invalid: 0 });
+  assert.deepEqual(await fs.readFile((await reopened.lookup(track.id)).url), wav());
+  assert.deepEqual(await reopened.restore(backup.folder), { restored: 0, skipped: 1, invalid: 0 });
+  await fs.writeFile(path.join(backup.folder, 'invalid0001.json'), JSON.stringify({ ...track, id: '../escape' }));
+  await fs.writeFile(path.join(backup.folder, 'invalid0001.audio'), wav());
+  assert.deepEqual(await reopened.restore(backup.folder), { restored: 0, skipped: 1, invalid: 1 });
+  await assert.rejects(reopened.restore(path.join(directory, 'missing')));
+  assert.deepEqual(await reopened.restore(backup.folder), { restored: 0, skipped: 1, invalid: 1 }, 'a failed restore does not block the next one');
+  await reopened.close();
+  const restored = new AudioCache(directory);
+  await restored.start();
+  assert.equal(restored.view.items[0].title, track.title);
+  await restored.close();
+});

@@ -4,6 +4,7 @@ const { existsSync } = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const AudioEngine = require('./mpv.cjs');
+const AudioCache = require('./audio-cache.cjs');
 
 function resolveAudio(id, directory, signal) {
   if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) throw new Error('Identificador de canción inválido.');
@@ -42,6 +43,8 @@ function resolveAudio(id, directory, signal) {
 class NativePlayer extends EventEmitter {
   constructor(directory, resolver = resolveAudio) {
     super(); this.directory = directory; this.resolve = resolver;
+    this.cache = new AudioCache(directory); this.local = false;
+    this.cache.on('change', () => this.emit('change'));
     this.engine = new AudioEngine(); this.queue = []; this.index = -1;
     this.shuffle = false; this.repeat = 'off'; this.loading = false; this.error = '';
     this.generation = 0;
@@ -55,7 +58,10 @@ class NativePlayer extends EventEmitter {
       }
     });
   }
-  async start() { await this.engine.start(); }
+  async start() {
+    try { await this.cache.start(); } catch { this.cache.error = 'No se puede acceder al almacenamiento local.'; }
+    await this.engine.start();
+  }
   snapshot() {
     const row = this.queue[this.index] || {};
     const p = this.engine.properties;
@@ -64,6 +70,7 @@ class NativePlayer extends EventEmitter {
       playing: !this.loading && !p.pause && !p['idle-active'], time: p['time-pos'] || 0,
       duration: p.duration || row.duration || 0, volume: (p.volume ?? 75) / 100,
       muted: !!p.mute, shuffle: this.shuffle, repeat: this.repeat, loading: this.loading, error: this.error,
+      local: this.local, saving: this.cache.jobs.size, cacheError: this.cache.error,
       queue: this.queue.map((track, index) => ({ ...track, index, selected: index === this.index }))
     };
   }
@@ -79,16 +86,20 @@ class NativePlayer extends EventEmitter {
     this.abort?.abort(); this.abort = new AbortController();
     const signal = this.abort.signal;
     const track = this.queue[index];
-    this.index = index; this.loading = true; this.error = ''; this.emit('change');
+    this.index = index; this.loading = true; this.local = false; this.error = ''; this.emit('change');
     // Resolve asynchronously so transport controls remain responsive during extraction.
     this.loadingTask = (async () => {
       try {
         await this.engine.command('stop');
         if (generation !== this.generation) return;
-        const audio = await this.resolve(track.id, this.directory, signal);
+        const cached = await this.cache.lookup(track.id);
         if (generation !== this.generation) return;
+        const audio = cached || await this.resolve(track.id, this.directory, signal);
+        if (generation !== this.generation) return;
+        this.local = !!audio.local;
         if (audio.duration) this.queue[index].duration = audio.duration;
         await this.engine.load(audio.url, audio.headers);
+        if (!audio.local) this.cache.save(track, audio);
       } catch (error) {
         if (generation !== this.generation) return;
         this.loading = false; this.error = error.name === 'AbortError' ? '' : error.message; this.emit('change');
@@ -130,6 +141,6 @@ class NativePlayer extends EventEmitter {
     }
     this.emit('change');
   }
-  async close() { this.generation++; this.abort?.abort(); await this.engine.close(); }
+  async close() { this.generation++; this.abort?.abort(); await Promise.all([this.cache.close(), this.engine.close()]); }
 }
 module.exports = { NativePlayer, resolveAudio };

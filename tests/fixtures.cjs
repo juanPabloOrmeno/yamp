@@ -10,6 +10,7 @@ class FixtureCatalogue extends Catalogue {
   async library() { await this.home(); this.view.title = 'MI BIBLIOTECA'; }
   async search(query) { await this.home(); this.view.title = query; }
   async like() {}
+  async *libraryTracks() { yield { id: 'offline0001', kind: 'song', title: 'Canción local' }; }
 }
 function resolver() { return Promise.resolve({ url: path.resolve(__dirname, '../test-results/silence.wav'), duration: 20 }); }
 module.exports = { FixtureCatalogue, resolver };

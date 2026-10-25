@@ -1,10 +1,11 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const ChromeMusic = require('./chrome.cjs');
 const { saveSession } = require('./auth-session.cjs');
 const { NativePlayer } = require('./native-player.cjs');
 const { Catalogue } = require('./catalogue.cjs');
+const LibraryDownload = require('./library-download.cjs');
 
 const test = process.env.YAMP_TEST === '1';
 app.setName('YAMP');
@@ -12,6 +13,8 @@ app.setDesktopName('yamp.desktop');
 app.setPath('userData', test ? process.env.YAMP_TEST_PROFILE : path.join(app.getPath('appData'), 'yamp'));
 let mini, player, catalogue, chrome, mpris, timer, quitting = false;
 let mode = 'catalogue', catalogueBusy = false;
+let localBusy = false;
+let libraryDownload;
 let state = { ready: false, queue: [], volume: 0.75 };
 const uiURL = pathToFileURL(path.join(__dirname, 'index.html')).href;
 
@@ -19,7 +22,8 @@ function refresh() {
   if (!player || !mini || mini.isDestroyed()) return;
   state = {
     ...player.snapshot(), pinned: mini.isAlwaysOnTop(), mode,
-    catalogue: catalogue.view, catalogueBusy, authenticating: !!chrome?.process
+     catalogue: mode === 'local' ? player.cache.view : catalogue.view, catalogueBusy, authenticating: !!chrome?.process,
+     localLibrary: player.cache.view, localBusy, libraryDownload: libraryDownload?.state
   };
   if (mpris) {
     mpris.playbackStatus = player.engine.properties['idle-active'] ? 'Stopped' : state.playing ? 'Playing' : 'Paused';
@@ -75,6 +79,8 @@ else {
     } else player = new NativePlayer(directory);
     player.on('change', refresh);
     await player.start();
+    libraryDownload = new LibraryDownload(catalogue, player);
+    libraryDownload.on('change', refresh);
     mini = new BrowserWindow({
       title: 'YAMP', width: 420, height: 500, resizable: false, frame: false,
       backgroundColor: '#242532', show: false,
@@ -90,7 +96,40 @@ else {
           case 'state': refresh(); return { ok: true, state };
           case 'music': case 'home': await browse(() => catalogue.home()); break;
           case 'library': await browse(() => catalogue.library()); break;
-          case 'show-queue': mode = 'queue'; break;
+           case 'show-queue': mode = 'queue'; break;
+           case 'local': mode = 'local'; break;
+           case 'download-library':
+             if (localBusy) throw new Error('Espera a que termine la operación local.');
+             libraryDownload.start(); break;
+           case 'stop-library-download': libraryDownload.stop(); break;
+           case 'delete-local': case 'backup-local': case 'restore-local': {
+             if (localBusy) throw new Error('Espera a que termine la operación local.');
+             if (libraryDownload.state.running) throw new Error('Detén primero el guardado de bibliotecas.');
+             if (action !== 'restore-local') player.cache.selection(value);
+             localBusy = true; refresh();
+             try {
+               if (action === 'restore-local') {
+                 const result = await dialog.showOpenDialog(mini, { title: 'Elegir carpeta YAMP-respaldo para restaurar', properties: ['openDirectory'] });
+                 if (result.canceled || !result.filePaths.length) return { ok: true };
+                 const restored = await player.cache.restore(result.filePaths[0]);
+                 return { ok: true, message: `${restored.restored} canción(es) restaurada(s), ${restored.skipped} ya guardada(s).${restored.invalid ? ` ${restored.invalid} archivo(s) inválido(s) omitido(s).` : ''}` };
+               }
+               if (action === 'delete-local') {
+                 const count = await player.cache.remove(value);
+                 return { ok: true, message: `${count} canción(es) eliminada(s) del disco.` };
+               }
+               const result = await dialog.showOpenDialog(mini, { title: 'Elegir carpeta para el respaldo de YAMP', properties: ['openDirectory', 'createDirectory'] });
+               if (result.canceled || !result.filePaths.length) return { ok: true };
+               const backup = await player.cache.backup(value, result.filePaths[0]);
+               return { ok: true, message: `${backup.count} canción(es) respaldada(s) en ${backup.folder}` };
+             } finally { localBusy = false; refresh(); }
+           }
+           case 'open-local': case 'enqueue-local': {
+             const row = player.cache.selected(value);
+             if (action === 'enqueue-local') player.queue.push({ ...row });
+             else player.playRows(player.cache.view.items, row.id);
+             break;
+           }
           case 'search':
             if (typeof value !== 'string' || !value.trim() || value.length > 300) throw new Error('Escribe una búsqueda válida.');
             await browse(() => catalogue.search(value.trim())); break;
@@ -136,7 +175,11 @@ else {
     });
     await mini.loadFile(path.join(__dirname, 'index.html'));
     mini.show(); setupMpris(); refresh();
-    browse(() => catalogue.home()).catch(error => { player.error = error.message; refresh(); });
+    browse(() => catalogue.home()).catch(error => {
+      if (mode === 'catalogue' && player.cache.view.items.length) mode = 'local';
+      if (mode !== 'local') player.error = error.message;
+      refresh();
+    });
     if (!test && process.argv.includes('--login')) chrome.login().then(refresh).catch(error => { player.error = error.message; refresh(); });
     timer = setInterval(refresh, 500);
   }).catch(error => { console.error(error.message); app.quit(); });
@@ -144,6 +187,7 @@ else {
 app.on('before-quit', event => {
   if (quitting) return;
   quitting = true; clearInterval(timer);
+  libraryDownload?.stop();
   event.preventDefault();
   Promise.allSettled([player?.close(), chrome?.close()]).finally(() => app.quit());
 });

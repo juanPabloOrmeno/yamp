@@ -13,6 +13,26 @@ Abre **ϟ YAMP** desde Waybar, busca **YAMP** en aplicaciones o ejecuta `~/.loca
 - **BIBLIOTECA**: biblioteca de tu cuenta. Abre una playlist o álbum y selecciona
   una canción. El selector permite filtrar canciones, playlists, álbumes, etc.
 - **COLA**: canciones pendientes; seleccionar una empieza a reproducirla.
+- **LOCAL**: canciones guardadas para escuchar sin conexión. Al reproducir, YAMP
+  busca primero el audio local, sin consultar YouTube si ya está guardado.
+  Las canciones nuevas se guardan completas en segundo plano mientras suenan;
+  aparecen en LOCAL cuando termina la descarga, incluso si cambias de canción.
+  Mantén YAMP abierto hasta que termine de guardar. Una descarga interrumpida
+  se vuelve a intentar la próxima vez que reproduzcas esa canción con conexión.
+  La biblioteca local persiste al reiniciar y no tiene borrado automático.
+- **ADMINISTRAR**: abre la pantalla de canciones locales. Selecciona canciones
+  individuales o todas para **ELIMINAR DEL DISCO** o **RESPALDAR…**. El respaldo
+  permite elegir una carpeta y crea dentro una subcarpeta `YAMP-respaldo-*` con
+  el audio y sus metadatos, sin sobrescribir respaldos anteriores. Eliminar una
+  canción local no borra sus respaldos; volver a reproducirla desde YouTube la
+  guardará nuevamente.
+  **RESTAURAR…** permite elegir una carpeta `YAMP-respaldo-*` para recuperar
+  canciones sin conexión. Omite las que ya están guardadas y los archivos inválidos.
+  **GUARDAR BIBLIOTECAS** recorre tu biblioteca de YouTube Music, sus playlists,
+  álbumes y páginas adicionales, y guarda las canciones en segundo plano.
+  Requiere sesión y conexión; omite canciones ya locales y muestra el progreso
+  y los errores. **DETENER** conserva lo descargado y deja terminar el guardado
+  actual. Mantén YAMP abierto; puedes repetir la operación para completar faltantes.
 - **MÁS**: carga la siguiente página cuando el servicio tiene más resultados.
 - **PL**: alterna entre reproductor compacto y panel de catálogo.
 - **SHUF / REP**: aleatorio y repetición (desactivada → toda la cola → una canción).
@@ -50,6 +70,7 @@ migrada durante esta actualización.
 
 Datos en `~/.config/yamp/`: `native-session.json` y `cookies.txt` contienen la
 sesión y tienen permisos **0600**. `chrome-profile/` conserva el perfil de login.
+`audio/` contiene el audio y los títulos de las canciones guardadas sin conexión.
 Nunca se envían cookies o URLs firmadas al renderer de Electron ni a los logs.
 
 ## Alcance
@@ -57,7 +78,7 @@ Nunca se envían cookies o URLs firmadas al renderer de Electron ni a los logs.
 La búsqueda inicial es de canciones. La biblioteca permite abrir playlists y
 álbumes; seleccionar un artista busca sus canciones. La cola toma las canciones
 actualmente cargadas en la lista: usa MÁS para ampliar una playlist antes de
-reproducirla. No hay ecualizador, descargas ni edición de playlists en esta versión.
+reproducirla. No hay ecualizador ni edición de playlists en esta versión.
 Las APIs no oficiales y la extracción de audio pueden requerir actualizaciones
 cuando cambie YouTube; una sesión caducada o contenido no disponible devuelve un
 error en el panel. Esto no replica los servidores de YouTube Music.

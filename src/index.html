@@ -32,12 +32,23 @@
     <section class="playlist" id="playlist" aria-label="Cola de reproducción">
       <div class="section-title"><span class="grooves"></span><h2 id="list-title">CATÁLOGO</h2><span class="grooves"></span><span id="count">00</span></div>
       <form id="search-form"><input id="search" type="search" placeholder="Buscar en YouTube Music…" aria-label="Buscar música" maxlength="300" required><button type="submit" title="Buscar">⌕</button></form>
-      <nav class="catalogue-nav"><button data-action="show-queue">COLA</button><button data-action="home">INICIO</button><button data-action="library">BIBLIOTECA</button><select id="filter" aria-label="Filtrar biblioteca" hidden></select><button data-action="more" id="more" hidden title="Cargar más resultados">MÁS</button></nav>
+      <nav class="catalogue-nav"><button data-action="show-queue">COLA</button><button data-action="home">INICIO</button><button data-action="library">BIBLIOTECA</button><button data-action="local" title="Canciones guardadas sin conexión">LOCAL</button><select id="filter" aria-label="Filtrar biblioteca" hidden></select><button data-action="more" id="more" hidden title="Cargar más resultados">MÁS</button></nav>
       <ol id="queue"></ol>
       <div id="empty">TU PRÓXIMA OBSESIÓN EMPIEZA AQUÍ.<br><span>Busca música o abre tu biblioteca.</span></div>
-      <footer><button data-action="login" title="Chrome se usa únicamente para iniciar sesión">CUENTA ↗</button><button data-action="save-session" id="save-session" hidden title="Guardar la sesión y cerrar Chrome">GUARDAR SESIÓN</button><span>AUDIO NATIVO <b>0.2</b></span></footer>
+      <footer><button data-action="login" title="Chrome se usa únicamente para iniciar sesión">CUENTA ↗</button><button data-action="save-session" id="save-session" hidden title="Guardar la sesión y cerrar Chrome">GUARDAR SESIÓN</button><button id="manage-local" title="Administrar canciones guardadas">ADMINISTRAR</button><span>AUDIO NATIVO <b>0.2</b></span></footer>
     </section>
   </main>
+  <dialog id="local-manager" aria-labelledby="local-manager-title">
+    <header class="manager-heading"><h2 id="local-manager-title">CANCIONES LOCALES</h2><button id="close-manager" aria-label="Cerrar administrador">×</button></header>
+    <p>Selecciona canciones para eliminarlas del disco o respaldarlas en otra carpeta.</p>
+    <label class="select-all"><input type="checkbox" id="local-select-all"> Seleccionar todas</label>
+    <div id="local-tracks"></div>
+    <div id="local-summary"></div>
+    <div class="manager-actions"><button id="backup-local">RESPALDAR…</button><button id="restore-local">RESTAURAR…</button><button id="delete-local">ELIMINAR DEL DISCO</button></div>
+    <p id="local-message" role="status"></p>
+    <div class="manager-actions library-actions"><button id="download-library">GUARDAR BIBLIOTECAS</button><button id="stop-library-download" hidden>DETENER</button></div>
+    <p id="library-progress" role="status">Guarda todas las canciones de tu biblioteca, playlists y álbumes.</p>
+  </dialog>
   <script src="renderer.js"></script>
 </body>
 </html>

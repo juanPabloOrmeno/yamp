@@ -78,3 +78,18 @@ body.compact .chassis { height: 240px; }
 #empty { top: 120px; }
 button:disabled { opacity: .5; cursor: wait; }
 [hidden] { display: none !important; }
+dialog { width: calc(100% - 24px); max-height: calc(100% - 24px); padding: 12px; border: 2px ridge #9699a6; background: #2e2f3c; color: #c6cad5; }
+dialog::backdrop { background: #000a; }
+.manager-heading, .manager-actions { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.manager-heading button { width: 22px; }
+dialog p { line-height: 1.5; }
+.select-all { display: flex; align-items: center; gap: 5px; margin: 8px 0; }
+#local-tracks { max-height: 240px; overflow-y: auto; background: #090f0d; border: 1px solid #666c79; }
+.local-track { display: flex; align-items: center; gap: 6px; padding: 7px; color: var(--green); }
+.local-track span { min-width: 0; overflow-wrap: anywhere; }
+.local-track small { display: block; color: #7b9d63; }
+#local-summary { margin: 9px 0; color: #a5adbb; }
+.manager-actions button { font-size: 9px; }
+#local-message { overflow-wrap: anywhere; user-select: text; margin-bottom: 0; }
+.library-actions { margin-top: 12px; }
+#library-progress { overflow-wrap: anywhere; }
