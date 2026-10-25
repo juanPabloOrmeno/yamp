@@ -19,7 +19,7 @@
       <div class="screen">
         <div class="readout"><span id="indicator">■</span><span id="time">00:00</span><span class="format">WEB<br>STEREO</span></div>
         <div class="track"><div id="title">YAMP · TU MÚSICA, A TU MANERA</div><div id="artist">Busca una canción o abre tu biblioteca</div></div>
-        <div class="screen-footer"><span id="status">CONECTANDO</span><span id="duration">--:--</span><span>YT / DIGITAL AUDIO</span></div>
+        <div class="screen-footer"><span id="status">CONECTANDO</span><span id="duration">--:--</span><span id="local-audio" hidden role="img" aria-label="Audio local, disponible sin conexión" title="Audio local · Disponible sin conexión"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h8l2 2v10H3zM5 2v4h5V2M5 14V9h6v5"/></svg></span><span>YT / DIGITAL AUDIO</span></div>
       </div>
       <input id="seek" type="range" min="0" max="100" value="0" step="0.1" aria-label="Posición de reproducción" disabled>
       <div class="mixer"><button data-action="mute" id="mute" title="Silenciar">VOL</button><input id="volume" type="range" min="0" max="100" value="75" aria-label="Volumen"><span id="volume-value">75%</span><button data-action="shuffle" id="shuffle" title="Aleatorio">SHUF</button><button data-action="repeat" id="repeat" title="Repetición: desactivada / toda la cola / una canción">REP</button><button data-action="like" title="Guardar Me gusta en tu cuenta">♥</button></div>
@@ -27,17 +27,25 @@
         <div class="transport-buttons"><button data-action="previous" title="Anterior" aria-label="Anterior">|◀</button><button data-action="toggle" id="play" title="Reproducir / pausar (espacio)" aria-label="Reproducir / pausar">▶</button><button data-action="pause" title="Pausar" aria-label="Pausar">Ⅱ</button><button data-action="stop" title="Detener" aria-label="Detener">■</button><button data-action="next" title="Siguiente" aria-label="Siguiente">▶|</button></div>
         <button data-action="music" class="music-button">MUSIC</button><button id="toggle-queue" title="Mostrar / ocultar catálogo" aria-expanded="true">PL</button>
       </div>
-      <div class="message" id="message" role="status">Conectando con YouTube Music…</div>
+      <div class="message" id="message" role="status"></div>
     </section>
     <section class="playlist" id="playlist" aria-label="Cola de reproducción">
       <div class="section-title"><span class="grooves"></span><h2 id="list-title">CATÁLOGO</h2><span class="grooves"></span><span id="count">00</span></div>
       <form id="search-form"><input id="search" type="search" placeholder="Buscar en YouTube Music…" aria-label="Buscar música" maxlength="300" required><button type="submit" title="Buscar">⌕</button></form>
-      <nav class="catalogue-nav"><button data-action="show-queue">COLA</button><button data-action="home">INICIO</button><button data-action="library">BIBLIOTECA</button><button data-action="local" title="Canciones guardadas sin conexión">LOCAL</button><select id="filter" aria-label="Filtrar biblioteca" hidden></select><button data-action="more" id="more" hidden title="Cargar más resultados">MÁS</button></nav>
+      <nav class="catalogue-nav"><button data-action="show-queue">COLA</button><button data-action="history">HISTORIAL</button><button data-action="home">INICIO</button><button data-action="library">BIBLIOTECA</button><button data-action="local" title="Canciones guardadas sin conexión">LOCAL</button><select id="filter" aria-label="Filtrar biblioteca" hidden></select><button data-action="more" id="more" hidden title="Cargar más resultados">MÁS</button></nav>
+      <div id="queue-actions" hidden><button id="save-playlist">GUARDAR PLAYLIST</button><button id="clear-queue" data-action="clear-queue">LIMPIAR COLA</button></div>
       <ol id="queue"></ol>
       <div id="empty">TU PRÓXIMA OBSESIÓN EMPIEZA AQUÍ.<br><span>Busca música o abre tu biblioteca.</span></div>
-      <footer><button data-action="login" title="Chrome se usa únicamente para iniciar sesión">CUENTA ↗</button><button data-action="save-session" id="save-session" hidden title="Guardar la sesión y cerrar Chrome">GUARDAR SESIÓN</button><button id="manage-local" title="Administrar canciones guardadas">ADMINISTRAR</button><span>AUDIO NATIVO <b>0.2</b></span></footer>
+      <footer><button data-action="login" title="Chrome se usa únicamente para iniciar sesión">CUENTA ↗</button><button data-action="save-session" id="save-session" hidden title="Guardar la sesión y cerrar Chrome">GUARDAR SESIÓN</button><button id="manage-local" title="Administrar canciones guardadas">ADMINISTRAR</button><button id="show-playlists">PLAYLISTS</button><span>AUDIO NATIVO <b>0.2</b></span></footer>
     </section>
   </main>
+  <dialog id="playlists-dialog" aria-labelledby="playlists-title">
+    <header class="manager-heading"><h2 id="playlists-title">MIS PLAYLISTS · YAMP</h2><button id="close-playlists" aria-label="Cerrar playlists">×</button></header>
+    <form id="playlist-form"><label for="playlist-name">Guardar la cola actual como playlist</label><div class="playlist-name-row"><input id="playlist-name" required maxlength="100" placeholder="Nombre de la playlist"><button id="confirm-playlist" type="submit">GUARDAR</button></div></form>
+    <p>Cargar una playlist reemplaza la cola actual. Las canciones guardadas se reproducen sin conexión.</p>
+    <div id="saved-playlists"></div>
+    <p id="playlists-message" role="status"></p>
+  </dialog>
   <dialog id="local-manager" aria-labelledby="local-manager-title">
     <header class="manager-heading"><h2 id="local-manager-title">CANCIONES LOCALES</h2><button id="close-manager" aria-label="Cerrar administrador">×</button></header>
     <p>Selecciona canciones para eliminarlas del disco o respaldarlas en otra carpeta.</p>

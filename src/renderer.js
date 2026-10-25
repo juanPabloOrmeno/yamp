@@ -2,6 +2,37 @@ const $ = id => document.getElementById(id);
 let state = {}, listKey = '', filterKey = '', compact = false, messageUntil = 0;
 let localKey = '', managing = false;
 const selectedLocal = new Set();
+let playlistsKey = '', savingPlaylist = false;
+function renderPlaylists() {
+  $('confirm-playlist').disabled = savingPlaylist || !state.queue?.length;
+  const key = JSON.stringify(state.playlists || []);
+  if (key === playlistsKey) return;
+  playlistsKey = key;
+  $('saved-playlists').replaceChildren(...(state.playlists || []).map(list => {
+    const row = document.createElement('div'); row.className = 'saved-playlist';
+    const name = document.createElement('span'); name.textContent = `${list.name} · ${list.count} canciones`;
+    const load = document.createElement('button'); load.textContent = 'CARGAR';
+    load.addEventListener('click', async () => {
+      const result = await command('load-playlist', list.id);
+      if (result.ok) $('playlists-dialog').close(); else $('playlists-message').textContent = result.error;
+    });
+    row.append(name, load); return row;
+  }));
+}
+for (const id of ['save-playlist', 'show-playlists']) $(id).addEventListener('click', () => {
+  renderPlaylists(); $('playlists-message').textContent = ''; $('playlists-dialog').showModal();
+  if (id === 'save-playlist') $('playlist-name').focus();
+});
+$('close-playlists').addEventListener('click', () => $('playlists-dialog').close());
+$('playlist-form').addEventListener('submit', async event => {
+  event.preventDefault(); if (savingPlaylist) return;
+  savingPlaylist = true; renderPlaylists();
+  try {
+    const result = await command('save-playlist', $('playlist-name').value);
+    $('playlists-message').textContent = result.ok ? 'Playlist guardada en YAMP.' : result.error;
+    if (result.ok) { $('playlist-name').value = ''; const updated = await command('state'); if (updated.state) render(updated.state); }
+  } finally { savingPlaylist = false; renderPlaylists(); }
+});
 function renderLocal() {
   const rows = state.localLibrary?.items || [];
   const available = new Set(rows.map(row => row.id));
@@ -67,12 +98,14 @@ async function command(action, value) {
 }
 function render(next) {
   state = next;
+  if ($('playlists-dialog').open) renderPlaylists();
   if ($('local-manager').open) renderLocal();
   $('title').textContent = state.title || 'YAMP · TU MÚSICA, A TU MANERA';
   $('title').title = state.title || '';
   $('artist').textContent = state.artist || 'Busca una canción o abre tu biblioteca';
   $('time').textContent = clock(state.time);
   $('duration').textContent = state.duration ? clock(state.duration) : '--:--';
+  $('local-audio').hidden = !state.local;
   $('status').textContent = state.loading ? 'CARGANDO AUDIO' : state.playing ? 'PLAYING' : state.title ? 'PAUSED' : 'READY';
   $('indicator').textContent = state.playing ? '▶' : '■';
   $('play').textContent = state.playing ? 'Ⅱ' : '▶';
@@ -86,9 +119,12 @@ function render(next) {
   $('seek').disabled = !state.duration || state.loading;
   if (document.activeElement !== $('volume')) $('volume').value = Math.round((state.volume ?? 0.75) * 100);
   $('volume-value').textContent = state.muted ? 'MUTE' : `${Math.round((state.volume ?? 0.75) * 100)}%`;
-   if (Date.now() > messageUntil) message(state.error || state.cacheError || (state.authenticating ? 'Inicia sesión en Chrome y pulsa GUARDAR SESIÓN.' : state.loading ? 'Resolviendo audio… puedes detenerlo o elegir otra canción.' : state.saving ? `Guardando ${state.saving} canción(es) para escuchar sin conexión…` : state.local ? 'AUDIO LOCAL · SIN CONEXIÓN' : state.catalogueBusy ? 'Cargando catálogo…' : 'AUDIO NATIVO · SIN NAVEGADOR · ESPACIO: PLAY/PAUSA'), !!(state.error || state.cacheError));
+   if (Date.now() > messageUntil) message(state.error || state.cacheError || '', !!(state.error || state.cacheError));
   const view = state.catalogue || { items: [], title: 'CATÁLOGO', filters: [] };
   const isQueue = state.mode === 'queue';
+  $('queue-actions').hidden = !isQueue;
+  $('clear-queue').disabled = !state.queue?.length;
+  $('save-playlist').disabled = !state.queue?.length;
   const rows = isQueue ? state.queue || [] : view.items;
   $('list-title').textContent = isQueue ? 'PLAYLIST EDITOR' : view.title;
   $('list-title').title = $('list-title').textContent;
@@ -118,11 +154,16 @@ function render(next) {
       button.title = [track.title, track.artist].filter(Boolean).join(' — ');
       const selection = { index, revision: view.revision };
       const local = state.mode === 'local';
-      button.addEventListener('click', () => isQueue ? command('queue', index) : command(local ? 'open-local' : 'open-item', selection));
+      const history = state.mode === 'history';
+      button.addEventListener('click', () => isQueue ? command('queue', index) : command(history ? 'open-history' : local ? 'open-local' : 'open-item', selection));
       li.append(button);
+      if (isQueue) {
+        const remove = document.createElement('button'); remove.className = 'add-item'; remove.textContent = '×'; remove.title = 'Quitar de la cola'; remove.setAttribute('aria-label', `Quitar ${track.title} de la cola`);
+        remove.addEventListener('click', () => command('remove-queue', index)); li.append(remove);
+      }
       if (!isQueue && ['song', 'video'].includes(track.kind)) {
         const add = document.createElement('button'); add.className = 'add-item'; add.textContent = '+'; add.title = 'Añadir a la cola';
-        add.addEventListener('click', () => command(local ? 'enqueue-local' : 'enqueue', selection)); li.append(add);
+        add.addEventListener('click', () => command(history ? 'enqueue-history' : local ? 'enqueue-local' : 'enqueue', selection)); li.append(add);
       }
       return li;
     }));
@@ -131,7 +172,7 @@ function render(next) {
   }
 }
 document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', async () => {
-  if (compact && ['music', 'home', 'library', 'local'].includes(button.dataset.action)) await expand();
+  if (compact && ['music', 'home', 'library', 'local', 'history'].includes(button.dataset.action)) await expand();
   command(button.dataset.action);
 }));
 async function expand() {

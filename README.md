@@ -13,6 +13,16 @@ Abre **ϟ YAMP** desde Waybar, busca **YAMP** en aplicaciones o ejecuta `~/.loca
 - **BIBLIOTECA**: biblioteca de tu cuenta. Abre una playlist o álbum y selecciona
   una canción. El selector permite filtrar canciones, playlists, álbumes, etc.
 - **COLA**: canciones pendientes; seleccionar una empieza a reproducirla.
+  Usa **×** para quitar una canción o **LIMPIAR COLA** para vaciarla y detener
+  la reproducción. Quitar canciones de la cola no elimina sus archivos locales.
+- **HISTORIAL**, después de COLA: las últimas 1000 canciones reproducidas, con
+  las más recientes primero y sin duplicados. Clic para reproducir o **+** para
+  añadir a la cola. Se conserva en `~/.config/yamp/history.json` al cerrar YAMP.
+- **GUARDAR PLAYLIST** en COLA: guarda todas las canciones en su orden actual
+  con el nombre que elijas. **PLAYLISTS** permite cargarlas de nuevo, reemplazando
+  la cola actual. Se conservan en `~/.config/yamp/playlists/` al reiniciar YAMP.
+  Guardar una playlist no descarga audio: usa las canciones locales cuando estén
+  disponibles y YouTube para las demás.
 - **LOCAL**: canciones guardadas para escuchar sin conexión. Al reproducir, YAMP
   busca primero el audio local, sin consultar YouTube si ya está guardado.
   Las canciones nuevas se guardan completas en segundo plano mientras suenan;
@@ -76,9 +86,10 @@ Nunca se envían cookies o URLs firmadas al renderer de Electron ni a los logs.
 ## Alcance
 
 La búsqueda inicial es de canciones. La biblioteca permite abrir playlists y
-álbumes; seleccionar un artista busca sus canciones. La cola toma las canciones
-actualmente cargadas en la lista: usa MÁS para ampliar una playlist antes de
-reproducirla. No hay ecualizador ni edición de playlists en esta versión.
+álbumes; seleccionar un artista busca sus canciones. Seleccionar una canción
+añade solo esa canción a la cola y la reproduce, conservando las anteriores.
+El botón **+** añade solo esa canción sin cambiar la reproducción.
+No hay ecualizador ni edición de playlists en esta versión.
 Las APIs no oficiales y la extracción de audio pueden requerir actualizaciones
 cuando cambie YouTube; una sesión caducada o contenido no disponible devuelve un
 error en el panel. Esto no replica los servidores de YouTube Music.

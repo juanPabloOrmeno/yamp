@@ -5,6 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const AudioEngine = require('./mpv.cjs');
 const AudioCache = require('./audio-cache.cjs');
+const History = require('./history.cjs');
 
 function resolveAudio(id, directory, signal) {
   if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) throw new Error('Identificador de canción inválido.');
@@ -44,12 +45,19 @@ class NativePlayer extends EventEmitter {
   constructor(directory, resolver = resolveAudio) {
     super(); this.directory = directory; this.resolve = resolver;
     this.cache = new AudioCache(directory); this.local = false;
+    this.history = new History(directory);
     this.cache.on('change', () => this.emit('change'));
     this.engine = new AudioEngine(); this.queue = []; this.index = -1;
     this.shuffle = false; this.repeat = 'off'; this.loading = false; this.error = '';
     this.generation = 0;
     this.engine.on('failure', error => { this.error = error; this.emit('change'); });
-    this.engine.on('file-loaded', () => { this.loading = false; this.error = ''; this.emit('change'); });
+    this.engine.on('file-loaded', () => {
+      this.loading = false; this.error = '';
+      if (this.historyTrack?.generation === this.generation) {
+        this.history.record(this.historyTrack.track); this.historyTrack = null;
+      }
+      this.emit('change');
+    });
     this.engine.on('end-file', event => {
       if (event.reason === 'error') { this.loading = false; this.error = 'No se pudo reproducir el audio. Prueba otra canción o renueva la sesión.'; this.emit('change'); }
       if (event.reason === 'eof') {
@@ -59,6 +67,7 @@ class NativePlayer extends EventEmitter {
     });
   }
   async start() {
+    await this.history.start();
     try { await this.cache.start(); } catch { this.cache.error = 'No se puede acceder al almacenamiento local.'; }
     await this.engine.start();
   }
@@ -80,6 +89,10 @@ class NativePlayer extends EventEmitter {
     if (index < 0) throw new Error('No hay una canción para reproducir.');
     this.playIndex(index);
   }
+  playTrack(row) {
+    this.queue.push({ ...row });
+    this.playIndex(this.queue.length - 1);
+  }
   playIndex(index) {
     if (!Number.isInteger(index) || !this.queue[index]) throw new Error('Canción fuera de la cola.');
     const generation = ++this.generation;
@@ -97,7 +110,8 @@ class NativePlayer extends EventEmitter {
         const audio = cached || await this.resolve(track.id, this.directory, signal);
         if (generation !== this.generation) return;
         this.local = !!audio.local;
-        if (audio.duration) this.queue[index].duration = audio.duration;
+        if (audio.duration) track.duration = audio.duration;
+        this.historyTrack = { track, generation };
         await this.engine.load(audio.url, audio.headers);
         if (!audio.local) this.cache.save(track, audio);
       } catch (error) {
@@ -121,6 +135,19 @@ class NativePlayer extends EventEmitter {
     switch (action) {
       case 'state': return this.snapshot();
       case 'queue': this.playIndex(value); break;
+      case 'clear-queue':
+        await this.run('stop'); this.queue = []; this.index = -1; this.local = false; this.error = ''; break;
+      case 'remove-queue': {
+        if (!Number.isInteger(value) || !this.queue[value]) throw new Error('Canción fuera de la cola.');
+        const current = value === this.index;
+        if (current) await this.run('stop');
+        this.queue.splice(value, 1);
+        if (current) {
+          this.index = -1; this.local = false; this.error = '';
+          if (this.queue.length) this.playIndex(Math.min(value, this.queue.length - 1));
+        } else if (value < this.index) this.index--;
+        break;
+      }
       case 'next': this.next(); break;
       case 'previous': if (this.queue.length) this.playIndex(Math.max(0, this.index - 1)); break;
       case 'shuffle': this.shuffle = !this.shuffle; break;
@@ -141,6 +168,6 @@ class NativePlayer extends EventEmitter {
     }
     this.emit('change');
   }
-  async close() { this.generation++; this.abort?.abort(); await Promise.all([this.cache.close(), this.engine.close()]); }
+  async close() { this.generation++; this.abort?.abort(); await Promise.all([this.cache.close(), this.engine.close(), this.history.pending]); }
 }
 module.exports = { NativePlayer, resolveAudio };

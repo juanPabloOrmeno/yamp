@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node src/launch.cjs",
     "test": "node --test tests/*.test.cjs",
-    "check": "node --check src/launch.cjs && node --check src/main.cjs && node --check src/chrome.cjs && node --check src/mpv.cjs && node --check src/audio-cache.cjs && node --check src/library-download.cjs && node --check src/native-player.cjs && node --check src/catalogue.cjs && node --check src/auth-session.cjs && node --check src/preload.cjs && node --check src/renderer.js"
+    "check": "node --check src/launch.cjs && node --check src/main.cjs && node --check src/chrome.cjs && node --check src/mpv.cjs && node --check src/audio-cache.cjs && node --check src/library-download.cjs && node --check src/playlists.cjs && node --check src/native-player.cjs && node --check src/catalogue.cjs && node --check src/auth-session.cjs && node --check src/preload.cjs && node --check src/renderer.js"
   },
   "dependencies": {
     "@jellybrick/mpris-service": "2.2.4",

@@ -6,6 +6,7 @@ const { saveSession } = require('./auth-session.cjs');
 const { NativePlayer } = require('./native-player.cjs');
 const { Catalogue } = require('./catalogue.cjs');
 const LibraryDownload = require('./library-download.cjs');
+const Playlists = require('./playlists.cjs');
 
 const test = process.env.YAMP_TEST === '1';
 app.setName('YAMP');
@@ -15,6 +16,7 @@ let mini, player, catalogue, chrome, mpris, timer, quitting = false;
 let mode = 'catalogue', catalogueBusy = false;
 let localBusy = false;
 let libraryDownload;
+let playlists;
 let state = { ready: false, queue: [], volume: 0.75 };
 const uiURL = pathToFileURL(path.join(__dirname, 'index.html')).href;
 
@@ -22,8 +24,8 @@ function refresh() {
   if (!player || !mini || mini.isDestroyed()) return;
   state = {
     ...player.snapshot(), pinned: mini.isAlwaysOnTop(), mode,
-     catalogue: mode === 'local' ? player.cache.view : catalogue.view, catalogueBusy, authenticating: !!chrome?.process,
-     localLibrary: player.cache.view, localBusy, libraryDownload: libraryDownload?.state
+     catalogue: mode === 'history' ? player.history.view : mode === 'local' ? player.cache.view : catalogue.view, catalogueBusy, authenticating: !!chrome?.process,
+     localLibrary: player.cache.view, localBusy, libraryDownload: libraryDownload?.state, playlists: playlists?.summaries || []
   };
   if (mpris) {
     mpris.playbackStatus = player.engine.properties['idle-active'] ? 'Stopped' : state.playing ? 'Playing' : 'Paused';
@@ -79,6 +81,7 @@ else {
     } else player = new NativePlayer(directory);
     player.on('change', refresh);
     await player.start();
+    playlists = new Playlists(directory); await playlists.start();
     libraryDownload = new LibraryDownload(catalogue, player);
     libraryDownload.on('change', refresh);
     mini = new BrowserWindow({
@@ -97,6 +100,13 @@ else {
           case 'music': case 'home': await browse(() => catalogue.home()); break;
           case 'library': await browse(() => catalogue.library()); break;
            case 'show-queue': mode = 'queue'; break;
+           case 'history': mode = 'history'; break;
+           case 'open-history': case 'enqueue-history': {
+             const row = player.history.selected(value);
+             if (action === 'enqueue-history') player.queue.push({ ...row });
+             else player.playTrack(row);
+             break;
+           }
            case 'local': mode = 'local'; break;
            case 'download-library':
              if (localBusy) throw new Error('Espera a que termine la operación local.');
@@ -127,7 +137,7 @@ else {
            case 'open-local': case 'enqueue-local': {
              const row = player.cache.selected(value);
              if (action === 'enqueue-local') player.queue.push({ ...row });
-             else player.playRows(player.cache.view.items, row.id);
+              else player.playTrack(row);
              break;
            }
           case 'search':
@@ -139,7 +149,7 @@ else {
             const row = catalogue.selected(value);
             if (['song', 'video'].includes(row.kind)) {
               if (action === 'enqueue') player.queue.push({ ...row });
-              else player.playRows(catalogue.view.items, row.id);
+               else player.playTrack(row);
             } else await browse(() => catalogue.open(row));
             break;
           }
@@ -156,16 +166,28 @@ else {
           case 'pin': mini.setAlwaysOnTop(!mini.isAlwaysOnTop()); break;
           case 'minimize': mini.hide(); break;
           case 'close': app.quit(); break;
-          case 'compact': mini.setSize(420, value === true ? 240 : 500); break;
+           case 'compact': mini.setSize(420, value === true ? 223 : 500); break;
           case 'volume':
             if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error('Volumen inválido');
             await transport(action, value); break;
           case 'seek':
             if (!Number.isFinite(value) || value < 0) throw new Error('Posición inválida');
             await transport(action, value); break;
-          case 'queue':
+           case 'queue':
             if (!Number.isInteger(value) || value < 0 || value >= player.queue.length) throw new Error('Canción inválida');
-            await transport(action, value); break;
+             await transport(action, value); break;
+           case 'remove-queue':
+             if (!Number.isInteger(value) || value < 0 || value >= player.queue.length) throw new Error('Canción inválida');
+             await transport(action, value); break;
+           case 'clear-queue': await transport(action); break;
+           case 'save-playlist': await playlists.save(value, player.queue); break;
+           case 'load-playlist': {
+             const tracks = playlists.tracks(value);
+             await player.run('stop');
+             player.queue = tracks; player.index = -1; player.local = false; player.error = '';
+             mode = 'queue';
+             break;
+           }
           default:
             if (!['play', 'pause', 'toggle', 'stop', 'previous', 'next', 'shuffle', 'repeat', 'like', 'mute'].includes(action)) throw new Error('Acción inválida');
             await transport(action);
