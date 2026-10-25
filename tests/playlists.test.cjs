@@ -16,4 +16,10 @@ test('playlists preserve queue order and duplicates across restarts', async t =>
   const tracks = reopened.tracks(list.id); tracks.pop();
   assert.equal(reopened.tracks(list.id).length, 3);
   assert.throws(() => reopened.tracks('../escape'));
+  await assert.rejects(reopened.remove('../escape'));
+  await reopened.remove(list.id);
+  assert.equal(reopened.summaries.length, 0);
+  assert.equal(tracks.length, 2, 'deleting the playlist leaves previously loaded tracks intact');
+  const afterDelete = new Playlists(directory); await afterDelete.start();
+  assert.equal(afterDelete.summaries.length, 0, 'deletion persists after restart');
 });

@@ -18,11 +18,17 @@ Abre **ϟ YAMP** desde Waybar, busca **YAMP** en aplicaciones o ejecuta `~/.loca
 - **HISTORIAL**, después de COLA: las últimas 1000 canciones reproducidas, con
   las más recientes primero y sin duplicados. Clic para reproducir o **+** para
   añadir a la cola. Se conserva en `~/.config/yamp/history.json` al cerrar YAMP.
+  **BORRAR HISTORIAL** vacía los registros guardados; conserva la cola, playlists
+  y archivos de audio. Las nuevas reproducciones vuelven a registrarse.
 - **GUARDAR PLAYLIST** en COLA: guarda todas las canciones en su orden actual
   con el nombre que elijas. **PLAYLISTS** permite cargarlas de nuevo, reemplazando
   la cola actual. Se conservan en `~/.config/yamp/playlists/` al reiniciar YAMP.
-  Guardar una playlist no descarga audio: usa las canciones locales cuando estén
-  disponibles y YouTube para las demás.
+  **ELIMINAR** junto a cada playlist borra la lista guardada, conservando la cola
+  actual y los archivos de audio locales.
+  Al guardar una playlist, las canciones que falten en el disco se descargan en
+  segundo plano, sin cambiar la reproducción ni volver a descargar las existentes.
+  El progreso aparece en PLAYLISTS y ADMINISTRAR. Mantén YAMP abierto hasta que
+  termine; si hay errores, puedes guardar de nuevo la cola para reintentar.
 - **LOCAL**: canciones guardadas para escuchar sin conexión. Al reproducir, YAMP
   busca primero el audio local, sin consultar YouTube si ya está guardado.
   Las canciones nuevas se guardan completas en segundo plano mientras suenan;
@@ -44,6 +50,9 @@ Abre **ϟ YAMP** desde Waybar, busca **YAMP** en aplicaciones o ejecuta `~/.loca
   y los errores. **DETENER** conserva lo descargado y deja terminar el guardado
   actual. Mantén YAMP abierto; puedes repetir la operación para completar faltantes.
 - **MÁS**: carga la siguiente página cuando el servicio tiene más resultados.
+- **AGREGAR TODO A LA COLA**: añade las canciones de la lista o búsqueda en orden,
+  incluidas sus páginas adicionales, conservando la cola y la reproducción actual.
+  También está disponible en LOCAL e HISTORIAL.
 - **PL**: alterna entre reproductor compacto y panel de catálogo.
 - **SHUF / REP**: aleatorio y repetición (desactivada → toda la cola → una canción).
 - **♥**: guarda Me gusta en tu cuenta.

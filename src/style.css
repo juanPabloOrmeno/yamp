@@ -72,9 +72,9 @@ body.compact .chassis { height: 223px; }
 .catalogue-nav select { background: #171e18; color: var(--green); font: 9px monospace; min-width: 0; max-width: 125px; border: 1px solid #5d6858; }
 #list-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 260px; }
 #queue { height: 157px; }
-#queue-actions { display: flex; gap: 5px; height: 26px; align-items: center; }
-#queue-actions button { height: 18px; font-size: 8px; }
-#queue-actions:not([hidden]) + #queue { height: 131px; }
+#queue-actions, #list-actions { display: flex; gap: 5px; height: 26px; align-items: center; }
+#queue-actions button, #list-actions button { height: 18px; font-size: 8px; }
+#queue-actions:not([hidden]) ~ #queue, #list-actions:not([hidden]) ~ #queue { height: 131px; }
 #queue li { display: flex; }
 #queue li button.item-main { flex: 1; min-width: 0; }
 #queue li button.add-item { width: 25px; flex: none; justify-content: center; color: #c9d99e; }
@@ -106,3 +106,4 @@ dialog p { line-height: 1.5; }
 .saved-playlist { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 0; }
 .saved-playlist span { overflow-wrap: anywhere; min-width: 0; }
 .saved-playlist button { flex-shrink: 0; font-size: 9px; }
+.playlist-buttons { display: flex; gap: 5px; flex-shrink: 0; }

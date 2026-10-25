@@ -3,6 +3,13 @@ const assert = require('node:assert/strict');
 const { Catalogue } = require('../src/catalogue.cjs');
 const LibraryDownload = require('../src/library-download.cjs');
 const song = id => ({ id, item_type: 'song', title: id });
+test('enqueue all reads every remaining page, excludes containers and preserves order', async () => {
+  const catalogue = new Catalogue('');
+  catalogue.view.items = [{ id: 'song0000001', kind: 'song', title: 'Primera' }, { id: 'album', kind: 'album' }];
+  catalogue.page = { has_continuation: true, getContinuation: async () => ({ contents: [song('song0000001'), song('song0000002')], has_continuation: true, getContinuation: async () => ({ contents: [song('song0000003')] }) }) };
+  assert.deepEqual((await catalogue.allSongs()).map(row => row.id), ['song0000001', 'song0000002', 'song0000003']);
+  assert.equal(catalogue.view.items.length, 2, 'displayed list remains unchanged');
+});
 test('library traversal includes filters, nested albums/playlists and continuations without duplicates', async () => {
   const catalogue = new Catalogue(''); catalogue.authenticated = true;
   const root = { contents: [song('song0000001'), { id: 'VLlist', item_type: 'playlist' }], filters: ['Álbumes'], applyFilter: async () => ({ contents: [{ id: 'album', item_type: 'album' }] }), has_continuation: true, getContinuation: async () => ({ contents: [song('song0000002')] }) };
@@ -32,4 +39,26 @@ test('bulk download skips local tracks, continues after failures and can be stop
   assert.equal(download.state.running, false);
   assert.equal(stored.size, 1);
   assert.match(download.state.message, /detenida/);
+});
+test('saving playlists downloads missing tracks in the background and accepts more while running', async () => {
+  const stored = new Set(['song0000001']);
+  const resolved = [];
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const player = {
+    directory: '',
+    cache: { lookup: async id => stored.has(id), save: async row => stored.add(row.id) },
+    resolve: async id => { resolved.push(id); await gate; return { url: 'audio' }; }
+  };
+  const download = new LibraryDownload({ libraryTracks() { throw new Error('Do not query the library'); } }, player);
+  const rows = [1, 2, 3].map(n => ({ id: `song000000${n}`, title: `Song ${n}` }));
+  download.enqueue(rows.slice(0, 2));
+  assert.equal(download.state.running, true);
+  download.enqueue(rows.slice(1));
+  release(); await download.task;
+  assert.deepEqual(resolved, ['song0000002', 'song0000003']);
+  assert.equal(download.state.saved, 2);
+  assert.equal(download.state.skipped, 1);
+  assert.equal(download.state.failed, 0);
+  assert.equal(download.state.running, false);
 });

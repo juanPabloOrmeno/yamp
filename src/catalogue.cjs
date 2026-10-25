@@ -109,6 +109,19 @@ class Catalogue {
     if (!value || value.revision !== this.view.revision || !Number.isInteger(value.index) || !this.view.items[value.index]) throw new Error('La lista cambió. Selecciona de nuevo.');
     return this.view.items[value.index];
   }
+  async allSongs() {
+    const songs = new Map();
+    const add = rows => {
+      for (const row of rows) if (['song', 'video'].includes(row.kind)) songs.set(row.id, { ...row });
+    };
+    add(this.view.items);
+    let page = this.page;
+    while (page?.has_continuation) {
+      page = await page.getContinuation();
+      add(collect(page));
+    }
+    return [...songs.values()];
+  }
   async open(row) {
     const yt = await this.client();
     if (row.kind === 'playlist') await this.show(row.title, () => yt.music.getPlaylist(row.id.replace(/^VL/, '')));

@@ -34,6 +34,7 @@
       <form id="search-form"><input id="search" type="search" placeholder="Buscar en YouTube Music…" aria-label="Buscar música" maxlength="300" required><button type="submit" title="Buscar">⌕</button></form>
       <nav class="catalogue-nav"><button data-action="show-queue">COLA</button><button data-action="history">HISTORIAL</button><button data-action="home">INICIO</button><button data-action="library">BIBLIOTECA</button><button data-action="local" title="Canciones guardadas sin conexión">LOCAL</button><select id="filter" aria-label="Filtrar biblioteca" hidden></select><button data-action="more" id="more" hidden title="Cargar más resultados">MÁS</button></nav>
       <div id="queue-actions" hidden><button id="save-playlist">GUARDAR PLAYLIST</button><button id="clear-queue" data-action="clear-queue">LIMPIAR COLA</button></div>
+      <div id="list-actions" hidden><button id="enqueue-all">AGREGAR TODO A LA COLA</button><button id="clear-history" data-action="clear-history" hidden>BORRAR HISTORIAL</button></div>
       <ol id="queue"></ol>
       <div id="empty">TU PRÓXIMA OBSESIÓN EMPIEZA AQUÍ.<br><span>Busca música o abre tu biblioteca.</span></div>
       <footer><button data-action="login" title="Chrome se usa únicamente para iniciar sesión">CUENTA ↗</button><button data-action="save-session" id="save-session" hidden title="Guardar la sesión y cerrar Chrome">GUARDAR SESIÓN</button><button id="manage-local" title="Administrar canciones guardadas">ADMINISTRAR</button><button id="show-playlists">PLAYLISTS</button><span>AUDIO NATIVO <b>0.2</b></span></footer>
@@ -45,6 +46,7 @@
     <p>Cargar una playlist reemplaza la cola actual. Las canciones guardadas se reproducen sin conexión.</p>
     <div id="saved-playlists"></div>
     <p id="playlists-message" role="status"></p>
+    <p id="playlist-download-progress" role="status"></p>
   </dialog>
   <dialog id="local-manager" aria-labelledby="local-manager-title">
     <header class="manager-heading"><h2 id="local-manager-title">CANCIONES LOCALES</h2><button id="close-manager" aria-label="Cerrar administrador">×</button></header>

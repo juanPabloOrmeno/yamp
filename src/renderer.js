@@ -5,6 +5,8 @@ const selectedLocal = new Set();
 let playlistsKey = '', savingPlaylist = false;
 function renderPlaylists() {
   $('confirm-playlist').disabled = savingPlaylist || !state.queue?.length;
+  const download = state.libraryDownload;
+  $('playlist-download-progress').textContent = download?.message ? `${download.message} ${download.title || ''} · ${download.saved} guardadas · ${download.skipped} existentes · ${download.failed} errores` : '';
   const key = JSON.stringify(state.playlists || []);
   if (key === playlistsKey) return;
   playlistsKey = key;
@@ -16,7 +18,17 @@ function renderPlaylists() {
       const result = await command('load-playlist', list.id);
       if (result.ok) $('playlists-dialog').close(); else $('playlists-message').textContent = result.error;
     });
-    row.append(name, load); return row;
+    const remove = document.createElement('button'); remove.textContent = 'ELIMINAR';
+    remove.setAttribute('aria-label', `Eliminar playlist ${list.name}`);
+    remove.addEventListener('click', async () => {
+      remove.disabled = true;
+      const result = await command('delete-playlist', list.id);
+      $('playlists-message').textContent = result.ok ? 'Playlist eliminada.' : result.error;
+      if (result.ok) { const updated = await command('state'); if (updated.state) render(updated.state); }
+      else remove.disabled = false;
+    });
+    const actions = document.createElement('div'); actions.className = 'playlist-buttons'; actions.append(load, remove);
+    row.append(name, actions); return row;
   }));
 }
 for (const id of ['save-playlist', 'show-playlists']) $(id).addEventListener('click', () => {
@@ -123,6 +135,11 @@ function render(next) {
   const view = state.catalogue || { items: [], title: 'CATÁLOGO', filters: [] };
   const isQueue = state.mode === 'queue';
   $('queue-actions').hidden = !isQueue;
+  $('list-actions').hidden = isQueue;
+  $('clear-history').hidden = state.mode !== 'history';
+  $('enqueue-all').disabled = !!state.enqueueBusy || (state.mode === 'catalogue' && state.catalogueBusy) || !view.items.some(row => ['song', 'video'].includes(row.kind));
+  $('enqueue-all').textContent = state.enqueueBusy ? 'AGREGANDO…' : 'AGREGAR TODO A LA COLA';
+  $('clear-history').disabled = state.mode !== 'history' || !view.items.length;
   $('clear-queue').disabled = !state.queue?.length;
   $('save-playlist').disabled = !state.queue?.length;
   const rows = isQueue ? state.queue || [] : view.items;
@@ -183,6 +200,7 @@ $('seek').addEventListener('change', event => { command('seek', Number(event.tar
 $('volume').addEventListener('input', event => { $('volume-value').textContent = `${event.target.value}%`; });
 $('volume').addEventListener('change', event => { command('volume', Number(event.target.value) / 100); event.target.blur(); });
 $('search-form').addEventListener('submit', event => { event.preventDefault(); command('search', $('search').value); });
+$('enqueue-all').addEventListener('click', () => command('enqueue-all', { mode: state.mode, revision: state.catalogue.revision }));
 $('filter').addEventListener('change', event => { if (event.target.value) command('filter', event.target.value); });
 $('toggle-queue').addEventListener('click', async () => {
   const result = await command('compact', !compact);

@@ -16,4 +16,11 @@ test('history persists recency, avoids duplicates and rejects stale selections',
   const reopened = new History(directory); await reopened.start();
   assert.deepEqual(reopened.view.items.map(row => row.id), [first.id, second.id]);
   assert.ok(reopened.view.items.every(row => row.playedAt));
+  reopened.record(second);
+  await reopened.clear();
+  assert.equal(reopened.view.items.length, 0);
+  const cleared = new History(directory); await cleared.start();
+  assert.equal(cleared.view.items.length, 0, 'clearing persists after queued writes and restart');
+  cleared.record(first); await cleared.pending;
+  assert.equal(cleared.view.items.length, 1, 'new playback is still recorded');
 });

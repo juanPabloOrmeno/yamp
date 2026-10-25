@@ -34,5 +34,11 @@ class Playlists {
     if (!list) throw new Error('Playlist no disponible.');
     return list.tracks.map(row => ({ ...row }));
   }
+  async remove(id) {
+    const list = this.items.find(item => item.id === id);
+    if (!list) throw new Error('Playlist no disponible.');
+    await fs.rm(path.join(this.directory, `${list.id}.json`), { force: true });
+    this.items = this.items.filter(item => item.id !== id);
+  }
 }
 module.exports = Playlists;

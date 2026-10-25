@@ -22,6 +22,16 @@ class History {
     }).catch(() => console.error('No se pudo guardar el historial.'));
   }
   get view() { return { title: 'HISTORIAL · RECIENTES', items: this.items, revision: this.revision, filters: [], more: false }; }
+  async clear() {
+    this.items = []; this.revision++;
+    const task = this.pending.then(async () => {
+      await fs.mkdir(path.dirname(this.file), { recursive: true, mode: 0o700 });
+      await fs.writeFile(`${this.file}.part`, '[]', { mode: 0o600 });
+      await fs.rename(`${this.file}.part`, this.file);
+    });
+    this.pending = task.catch(() => {});
+    await task;
+  }
   selected(value) {
     if (!value || value.revision !== this.revision || !Number.isInteger(value.index) || !this.items[value.index]) throw new Error('El historial cambió. Selecciona de nuevo.');
     return this.items[value.index];

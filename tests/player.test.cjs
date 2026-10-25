@@ -89,6 +89,11 @@ test('native player: one local window, audio, catalogue, queue, seeking, MPRIS a
     await ui.locator('#saved-playlists button').first().click();
     await ui.waitForFunction(() => document.querySelectorAll('#queue .item-main').length === 2);
     assert.deepEqual((await invoke('state')).state.queue.map(row => row.id), savedQueue);
+    await ui.locator('#show-playlists').click();
+    await ui.getByRole('button', { name: 'Eliminar playlist Mi cola favorita', exact: true }).click();
+    await ui.waitForFunction(() => document.querySelectorAll('#saved-playlists .saved-playlist').length === 0);
+    assert.deepEqual((await invoke('state')).state.queue.map(row => row.id), savedQueue);
+    await ui.locator('#close-playlists').click();
     await ui.locator('#clear-queue').click();
     await invoke('stop');
     await ui.waitForFunction(() => document.querySelector('#status').textContent === 'READY');
@@ -102,6 +107,10 @@ test('native player: one local window, audio, catalogue, queue, seeking, MPRIS a
     assert.equal((await invoke('state')).state.queue.length, 1);
     await ui.locator('#queue .item-main').first().click();
     await ui.waitForFunction(() => document.querySelector('#status').textContent === 'PLAYING');
+    await ui.locator('#clear-history').click();
+    await ui.waitForFunction(() => document.querySelectorAll('#queue .item-main').length === 0);
+    assert.equal((await invoke('state')).state.queue.length, 2);
+    assert.equal((await invoke('state')).state.playing, true);
     assert.equal(app.windows().length, 1);
     await ui.locator('[data-action=local]').click();
     await ui.waitForFunction(() => document.querySelector('#list-title').textContent === 'GUARDADAS · SIN CONEXIÓN');
@@ -141,5 +150,15 @@ test('native player: one local window, audio, catalogue, queue, seeking, MPRIS a
     await ui.locator('#queue .item-main').first().click();
     await ui.waitForFunction(() => document.querySelector('#status').textContent === 'PLAYING');
     assert.equal((await invoke('state')).state.local, true);
+    const beforeAll = (await invoke('state')).state;
+    await invoke('search', 'Todas las canciones');
+    await ui.locator('#enqueue-all').click();
+    await ui.waitForFunction(() => !document.querySelector('#enqueue-all').disabled);
+    const afterAll = (await invoke('state')).state;
+    assert.equal(afterAll.queue.length, beforeAll.queue.length + 2);
+    assert.equal(afterAll.id, beforeAll.id);
+    assert.equal(afterAll.playing, true);
+    assert.deepEqual(afterAll.queue.slice(-2).map(row => row.id), ['test0000001', 'test0000002']);
+    assert.equal((await invoke('enqueue-all', { mode: 'catalogue', revision: -1 })).ok, false);
   } finally { await app.close(); await fs.rm(profile, { recursive: true, force: true }); }
 });

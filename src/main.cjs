@@ -15,6 +15,7 @@ app.setPath('userData', test ? process.env.YAMP_TEST_PROFILE : path.join(app.get
 let mini, player, catalogue, chrome, mpris, timer, quitting = false;
 let mode = 'catalogue', catalogueBusy = false;
 let localBusy = false;
+let enqueueBusy = false;
 let libraryDownload;
 let playlists;
 let state = { ready: false, queue: [], volume: 0.75 };
@@ -25,7 +26,7 @@ function refresh() {
   state = {
     ...player.snapshot(), pinned: mini.isAlwaysOnTop(), mode,
      catalogue: mode === 'history' ? player.history.view : mode === 'local' ? player.cache.view : catalogue.view, catalogueBusy, authenticating: !!chrome?.process,
-     localLibrary: player.cache.view, localBusy, libraryDownload: libraryDownload?.state, playlists: playlists?.summaries || []
+     localLibrary: player.cache.view, localBusy, enqueueBusy, libraryDownload: libraryDownload?.state, playlists: playlists?.summaries || []
   };
   if (mpris) {
     mpris.playbackStatus = player.engine.properties['idle-active'] ? 'Stopped' : state.playing ? 'Playing' : 'Paused';
@@ -101,6 +102,19 @@ else {
           case 'library': await browse(() => catalogue.library()); break;
            case 'show-queue': mode = 'queue'; break;
            case 'history': mode = 'history'; break;
+           case 'enqueue-all': {
+             if (enqueueBusy) throw new Error('Ya se está agregando una lista.');
+             if (!value || value.mode !== mode || mode === 'queue') throw new Error('La lista cambió. Intenta de nuevo.');
+             const view = mode === 'local' ? player.cache.view : mode === 'history' ? player.history.view : catalogue.view;
+             if (value.revision !== view.revision || (mode === 'catalogue' && catalogueBusy)) throw new Error('La lista cambió o está cargando. Intenta de nuevo.');
+             enqueueBusy = true; refresh();
+             try {
+               const rows = mode === 'catalogue' ? await catalogue.allSongs() : view.items;
+               for (const row of rows) if (['song', 'video'].includes(row.kind)) player.queue.push({ ...row });
+             } finally { enqueueBusy = false; refresh(); }
+             break;
+           }
+           case 'clear-history': await player.history.clear(); break;
            case 'open-history': case 'enqueue-history': {
              const row = player.history.selected(value);
              if (action === 'enqueue-history') player.queue.push({ ...row });
@@ -180,7 +194,11 @@ else {
              if (!Number.isInteger(value) || value < 0 || value >= player.queue.length) throw new Error('Canción inválida');
              await transport(action, value); break;
            case 'clear-queue': await transport(action); break;
-           case 'save-playlist': await playlists.save(value, player.queue); break;
+           case 'save-playlist': {
+             const playlist = await playlists.save(value, player.queue);
+             libraryDownload.enqueue(playlist.tracks);
+             break;
+           }
            case 'load-playlist': {
              const tracks = playlists.tracks(value);
              await player.run('stop');
@@ -188,6 +206,7 @@ else {
              mode = 'queue';
              break;
            }
+           case 'delete-playlist': await playlists.remove(value); break;
           default:
             if (!['play', 'pause', 'toggle', 'stop', 'previous', 'next', 'shuffle', 'repeat', 'like', 'mute'].includes(action)) throw new Error('Acción inválida');
             await transport(action);
