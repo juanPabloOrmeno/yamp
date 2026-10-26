@@ -9,7 +9,7 @@ test('native player: one local window, audio, catalogue, queue, seeking, MPRIS a
   const root = path.resolve(__dirname, '..');
   const out = path.join(root, 'test-results');
   await fs.mkdir(out, { recursive: true });
-  const profile = await fs.mkdtemp('/tmp/opencode/yamp-test-');
+  const profile = await fs.mkdtemp(path.join(require('node:os').tmpdir(), 'yamp-test-'));
   const samples = 8000 * 20, data = Buffer.alloc(44 + samples * 2);
   data.write('RIFF', 0); data.writeUInt32LE(data.length - 8, 4); data.write('WAVEfmt ', 8);
   data.writeUInt32LE(16, 16); data.writeUInt16LE(1, 20); data.writeUInt16LE(1, 22);
@@ -39,13 +39,21 @@ test('native player: one local window, audio, catalogue, queue, seeking, MPRIS a
     assert.equal((await invoke('state')).state.queue.length, 1, 'playing a result queues only the selected song');
     await ui.locator('#queue .add-item').nth(1).click();
     assert.equal((await invoke('state')).state.queue.length, 2, 'adding another result preserves the queue');
-    assert.equal(execFileSync('playerctl', ['-p', 'yamp_test', 'status'], { encoding: 'utf8' }).trim(), 'Playing');
+    if (process.platform === 'linux') assert.equal(execFileSync('playerctl', ['-p', 'yamp_test', 'status'], { encoding: 'utf8' }).trim(), 'Playing');
     await invoke('minimize');
-    assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), false);
-    assert.equal(execFileSync('playerctl', ['-p', 'yamp_test', 'status'], { encoding: 'utf8' }).trim(), 'Playing');
+    if (process.platform === 'darwin') {
+      await ui.waitForTimeout(500);
+      assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMinimized()), true);
+      assert.equal((await invoke('state')).state.playing, true);
+    } else {
+      assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), false);
+      assert.equal(execFileSync('playerctl', ['-p', 'yamp_test', 'status'], { encoding: 'utf8' }).trim(), 'Playing');
+    }
     await app.evaluate(({ app }) => app.emit('second-instance'));
     assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), true);
-    execFileSync('playerctl', ['-p', 'yamp_test', 'pause']);
+    if (process.platform === 'darwin') {
+      await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.find(item => item.label === 'Reproducción').submenu.items[0].click());
+    } else execFileSync('playerctl', ['-p', 'yamp_test', 'pause']);
     await ui.waitForFunction(() => document.querySelector('#status').textContent === 'PAUSED');
     assert.equal((await invoke('seek', 7)).ok, true);
     await ui.waitForFunction(() => document.querySelector('#time').textContent === '00:07');
@@ -84,6 +92,7 @@ test('native player: one local window, audio, catalogue, queue, seeking, MPRIS a
     await ui.locator('#close-playlists').click();
     await ui.locator('#clear-queue').click();
     await ui.waitForFunction(() => document.querySelectorAll('#queue .item-main').length === 0);
+    await ui.waitForFunction(() => document.querySelector('#status').textContent === 'READY');
     assert.equal((await invoke('state')).state.playing, false);
     await ui.locator('#show-playlists').click();
     await ui.locator('#saved-playlists button').first().click();

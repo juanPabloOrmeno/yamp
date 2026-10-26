@@ -5,6 +5,26 @@ Music abiertos para buscar, consultar tu biblioteca o reproducir música.**
 
 ## Uso
 
+### macOS
+
+Abre `dist/YAMP-0.2.0-mac-arm64.dmg` y arrastra **YAMP** a **Aplicaciones**.
+La compilación generada en este equipo requiere **Apple Silicon y macOS 26 o
+posterior**. Incluye mpv, sus bibliotecas y yt-dlp: no requiere Homebrew para usarla.
+Google Chrome se necesita únicamente para iniciar sesión con **CUENTA ↗**.
+
+- **_** minimiza al Dock; pulsa el icono de YAMP para recuperar la ventana.
+- El menú **Reproducción**, el menú del Dock y las teclas multimedia controlan el audio.
+- **⌘P** pausa/reanuda; **⌘← / ⌘→** cambia de canción; **⌘Q** sale.
+- Copiar, pegar y seleccionar todo funcionan con los atajos habituales de macOS.
+- Los datos se guardan en `~/Library/Application Support/yamp/`.
+  Las referencias a `~/.config/yamp/` de este documento corresponden a Linux.
+
+Este DMG tiene firma local ad-hoc, sin certificado Developer ID ni notarización.
+Si macOS bloquea una copia descargada, autoriza YAMP en **Ajustes del Sistema →
+Privacidad y seguridad → Abrir igualmente** después de intentar abrirla.
+
+### Linux
+
 Abre **ϟ YAMP** desde Waybar, busca **YAMP** en aplicaciones o ejecuta `~/.local/bin/yamp`.
 
 - **MUSIC / INICIO**: recomendaciones dentro del panel retro.
@@ -119,6 +139,27 @@ npm test
 Las pruebas requieren sesión gráfica y D-Bus con `playerctl`. El test del player
 usa audio silencioso local con mpv real y un catálogo fixture; el test del login
 usa un perfil temporal de Chrome. Capturas en `test-results/`.
+
+En macOS, instala `mpv` y `yt-dlp` con `brew install mpv yt-dlp` para desarrollar.
+Las pruebas usan Chrome y mpv reales; D-Bus y `playerctl` solo se usan en Linux.
+
+### Generar instalador para macOS
+
+```sh
+npm ci
+npm run dist:mac
+```
+
+Requiere macOS, las herramientas de línea de comandos de Xcode y mpv instalado.
+El script `scripts/build-mac.cjs` genera el icono, copia mpv y sus dependencias
+transitivas, ajusta las rutas de las bibliotecas y descarga yt-dlp 2026.10.21
+verificando su SHA-256. Genera una aplicación `.app` y un instalador `.dmg` en
+`dist/`. `build/mac-resources/runtime-manifest.json` registra los componentes y
+el macOS mínimo detectado. El paquete usa la arquitectura de la máquina de
+compilación; para Intel debe construirse en un Mac Intel con sus dependencias.
+Para soportar versiones anteriores de macOS, compila con versiones de mpv y sus
+bibliotecas compatibles con esos sistemas. La compilación actual no está
+verificada en Intel ni en versiones anteriores de macOS.
 
 Instalación: `.local/bin/yamp`, `.local/share/applications/yamp.desktop`, módulo
 `custom/yamp` de Waybar y regla `yamp-mini` en la configuración Lua de Hyprland.

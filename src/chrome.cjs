@@ -1,5 +1,5 @@
 const { spawn } = require('node:child_process');
-const { existsSync } = require('node:fs');
+const { chromeExecutable } = require('./platform.cjs');
 const net = require('node:net');
 
 const HOME = 'https://music.youtube.com/';
@@ -28,7 +28,7 @@ class ChromeMusic {
     try { await this.starting; } finally { this.starting = null; }
   }
   async launch() {
-    const executable = ['/usr/bin/google-chrome-stable', '/usr/bin/google-chrome', '/opt/google/chrome/google-chrome'].find(existsSync);
+    const executable = chromeExecutable();
     if (!executable) throw new Error('Instala Google Chrome para iniciar sesión en YAMP.');
     const port = await new Promise((resolve, reject) => {
       const server = net.createServer();

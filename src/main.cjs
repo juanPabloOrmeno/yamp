@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, globalShortcut } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const ChromeMusic = require('./chrome.cjs');
@@ -10,7 +10,7 @@ const Playlists = require('./playlists.cjs');
 
 const test = process.env.YAMP_TEST === '1';
 app.setName('YAMP');
-app.setDesktopName('yamp.desktop');
+if (process.platform === 'linux') app.setDesktopName('yamp.desktop');
 app.setPath('userData', test ? process.env.YAMP_TEST_PROFILE : path.join(app.getPath('appData'), 'yamp'));
 let mini, player, catalogue, chrome, mpris, timer, quitting = false;
 let mode = 'catalogue', catalogueBusy = false;
@@ -53,6 +53,7 @@ async function browse(operation) {
   try { await operation(); } finally { catalogueBusy = false; refresh(); }
 }
 function setupMpris() {
+  if (process.platform !== 'linux') return;
   try {
     const Player = require('@jellybrick/mpris-service');
     mpris = new Player({ name: test ? 'yamp_test' : 'yamp', identity: 'YAMP', supportedUriSchemes: ['https'], supportedMimeTypes: ['audio/webm'], supportedInterfaces: ['player'] });
@@ -69,9 +70,39 @@ function setupMpris() {
   } catch (error) { console.error('MPRIS no disponible:', error.message); }
 }
 
+function showWindow() {
+  if (!mini || mini.isDestroyed()) return;
+  if (mini.isMinimized()) mini.restore();
+  mini.show(); mini.focus();
+}
+
+function setupMac() {
+  if (process.platform !== 'darwin') return;
+  const perform = action => () => transport(action).catch(error => { player.error = error.message; refresh(); });
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: 'YAMP', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] },
+    { label: 'Edición', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
+    { label: 'Reproducción', submenu: [
+      { label: 'Reproducir / Pausar', accelerator: 'Command+P', click: perform('toggle') },
+      { label: 'Anterior', accelerator: 'Command+Left', click: perform('previous') },
+      { label: 'Siguiente', accelerator: 'Command+Right', click: perform('next') }
+    ] },
+    { label: 'Ventana', submenu: [{ role: 'minimize' }, { label: 'Mostrar YAMP', click: showWindow }, { role: 'front' }] }
+  ]));
+  app.dock.setMenu(Menu.buildFromTemplate([
+    { label: 'Mostrar YAMP', click: showWindow },
+    { label: 'Reproducir / Pausar', click: perform('toggle') },
+    { label: 'Siguiente', click: perform('next') }
+  ]));
+  for (const [key, action] of Object.entries({ MediaPlayPause: 'toggle', MediaNextTrack: 'next', MediaPreviousTrack: 'previous', MediaStop: 'stop' })) {
+    globalShortcut.register(key, perform(action));
+  }
+}
+
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on('second-instance', () => { mini?.show(); mini?.focus(); });
+  app.on('second-instance', showWindow);
+  app.on('activate', showWindow);
   app.whenReady().then(async () => {
     const directory = app.getPath('userData');
     chrome = new ChromeMusic(path.join(directory, 'chrome-profile'));
@@ -178,7 +209,7 @@ else {
             break;
           }
           case 'pin': mini.setAlwaysOnTop(!mini.isAlwaysOnTop()); break;
-          case 'minimize': mini.hide(); break;
+           case 'minimize': process.platform === 'darwin' ? mini.minimize() : mini.hide(); break;
           case 'close': app.quit(); break;
            case 'compact': mini.setSize(420, value === true ? 223 : 500); break;
           case 'volume':
@@ -215,7 +246,7 @@ else {
       } catch (error) { return { ok: false, error: error.message }; }
     });
     await mini.loadFile(path.join(__dirname, 'index.html'));
-    mini.show(); setupMpris(); refresh();
+    mini.show(); setupMpris(); setupMac(); refresh();
     browse(() => catalogue.home()).catch(error => {
       if (mode === 'catalogue' && player.cache.view.items.length) mode = 'local';
       if (mode !== 'local') player.error = error.message;
@@ -223,11 +254,12 @@ else {
     });
     if (!test && process.argv.includes('--login')) chrome.login().then(refresh).catch(error => { player.error = error.message; refresh(); });
     timer = setInterval(refresh, 500);
-  }).catch(error => { console.error(error.message); app.quit(); });
+  }).catch(error => { console.error(error.message); dialog.showErrorBox('No se pudo iniciar YAMP', error.message); app.quit(); });
 }
 app.on('before-quit', event => {
   if (quitting) return;
   quitting = true; clearInterval(timer);
+  globalShortcut.unregisterAll();
   libraryDownload?.stop();
   event.preventDefault();
   Promise.allSettled([player?.close(), chrome?.close()]).finally(() => app.quit());

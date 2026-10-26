@@ -2,15 +2,14 @@ const { EventEmitter } = require('node:events');
 const { spawn } = require('node:child_process');
 const { existsSync } = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
+const { executable: findExecutable } = require('./platform.cjs');
 const AudioEngine = require('./mpv.cjs');
 const AudioCache = require('./audio-cache.cjs');
 const History = require('./history.cjs');
 
 function resolveAudio(id, directory, signal) {
   if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) throw new Error('Identificador de canción inválido.');
-  const executable = [path.join(os.homedir(), '.local/bin/yt-dlp'), '/usr/bin/yt-dlp'].find(existsSync);
-  if (!executable) throw new Error('No se encontró yt-dlp.');
+  const executable = findExecutable('yt-dlp');
   // Electron's own Node runtime also works as yt-dlp's JS engine; no desktop PATH dependency.
   const args = ['--no-playlist', '--skip-download', '--dump-single-json', '--no-warnings', '--socket-timeout', '20', '--js-runtimes', `node:${process.execPath}`, '-f', 'bestaudio/best'];
   const cookies = path.join(directory, 'cookies.txt');

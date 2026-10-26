@@ -5,7 +5,7 @@ const { once } = require('node:events');
 const ChromeMusic = require('../src/chrome.cjs');
 
 test('Chrome real: local control, browser identity, UTF-8, errors, restart and cleanup', { timeout: 45000 }, async () => {
-  const profile = await fs.mkdtemp('/tmp/opencode/yamp-chrome-test-');
+  const profile = await fs.mkdtemp(require('node:path').join(require('node:os').tmpdir(), 'yamp-chrome-test-'));
   const chrome = new ChromeMusic(profile);
   try {
     await chrome.start();

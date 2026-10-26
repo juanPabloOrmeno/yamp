@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const net = require('node:net');
+const { executable } = require('./platform.cjs');
 
 class AudioEngine extends EventEmitter {
   constructor() {
@@ -15,7 +16,7 @@ class AudioEngine extends EventEmitter {
   async start() {
     this.directory = await fs.mkdtemp(path.join(os.tmpdir(), 'yamp-audio-'));
     const socketPath = path.join(this.directory, 'ipc.sock');
-    this.process = spawn('/usr/bin/mpv', [
+    this.process = spawn(executable('mpv'), [
       '--no-config', '--idle=yes', '--no-video', '--no-terminal', '--audio-display=no',
       '--volume=75', '--ytdl=no', `--input-ipc-server=${socketPath}`
     ], { stdio: 'ignore' });

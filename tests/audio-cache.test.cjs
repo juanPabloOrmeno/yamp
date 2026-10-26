@@ -15,7 +15,7 @@ function wav() {
   data.write('data', 36); data.writeUInt32LE(data.length - 44, 40); return data;
 }
 test('saved audio survives restart and plays with no network or resolver', async t => {
-  const directory = await fs.mkdtemp('/tmp/opencode/yamp-offline-');
+  const directory = await fs.mkdtemp(path.join(require('node:os').tmpdir(), 'yamp-offline-'));
   const cache = new AudioCache(directory);
   let player;
   t.after(async () => { await player?.close(); await cache.close(); await fs.rm(directory, { recursive: true, force: true }); });
@@ -44,7 +44,7 @@ test('saved audio survives restart and plays with no network or resolver', async
 });
 
 test('failed or incomplete downloads stay out of the library and can be retried', async t => {
-  const directory = await fs.mkdtemp('/tmp/opencode/yamp-cache-');
+  const directory = await fs.mkdtemp(path.join(require('node:os').tmpdir(), 'yamp-cache-'));
   const cache = new AudioCache(directory);
   t.after(async () => { await cache.close(); await fs.rm(directory, { recursive: true, force: true }); });
   await cache.start();
@@ -62,7 +62,7 @@ test('failed or incomplete downloads stay out of the library and can be retried'
 });
 
 test('backups preserve audio and metadata independently of local deletion', async t => {
-  const directory = await fs.mkdtemp('/tmp/opencode/yamp-management-');
+  const directory = await fs.mkdtemp(path.join(require('node:os').tmpdir(), 'yamp-management-'));
   const cache = new AudioCache(directory);
   t.after(async () => { await cache.close(); await fs.rm(directory, { recursive: true, force: true }); });
   await cache.start();
