@@ -19,6 +19,7 @@ h1 span { font-size: 8px; color: #b0b4c7; letter-spacing: 1px; }
 #indicator { font-size: 12px; color: #65913f; }
 #time { font: 32px/1 'DejaVu Sans Mono', monospace; letter-spacing: 2px; text-shadow: 0 0 6px #b5f23335; }
 .format { font: 8px/1.5 monospace; color: #7ea65c; margin-left: auto; }
+#visualizer { width: 144px; height: 30px; flex-shrink: 0; margin-left: auto; image-rendering: pixelated; }
 .track { margin-top: 4px; min-width: 0; font-family: 'DejaVu Sans Mono', monospace; }
 #title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
 #artist { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #7b9d63; font-size: 9px; margin-top: 3px; }

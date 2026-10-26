@@ -12,10 +12,15 @@ La compilación generada en este equipo requiere **Apple Silicon y macOS 26 o
 posterior**. Incluye mpv, sus bibliotecas y yt-dlp: no requiere Homebrew para usarla.
 Google Chrome se necesita únicamente para iniciar sesión con **CUENTA ↗**.
 
-- **_** minimiza al Dock; pulsa el icono de YAMP para recuperar la ventana.
+- **_** o **⌘M** oculta la ventana y su icono del Dock, manteniendo la música.
+  YAMP queda en la barra superior: pulsa el rayo y elige **Mostrar YAMP** para
+  recuperar la ventana. Ese menú también permite pausar, cambiar de canción y salir.
 - El menú **Reproducción**, el menú del Dock y las teclas multimedia controlan el audio.
 - **⌘P** pausa/reanuda; **⌘← / ⌘→** cambia de canción; **⌘Q** sale.
 - Copiar, pegar y seleccionar todo funcionan con los atajos habituales de macOS.
+- La pantalla verde muestra 24 barras fijas, de graves a agudos, que suben y
+  bajan según la energía real de cada frecuencia. Bajan al pausar, silenciar o detener;
+  funcionan también en modo compacto y con canciones sin conexión.
 - Los datos se guardan en `~/Library/Application Support/yamp/`.
   Las referencias a `~/.config/yamp/` de este documento corresponden a Linux.
 

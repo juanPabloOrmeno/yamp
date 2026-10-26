@@ -42,14 +42,21 @@ test('native player: one local window, audio, catalogue, queue, seeking, MPRIS a
     if (process.platform === 'linux') assert.equal(execFileSync('playerctl', ['-p', 'yamp_test', 'status'], { encoding: 'utf8' }).trim(), 'Playing');
     await invoke('minimize');
     if (process.platform === 'darwin') {
-      await ui.waitForTimeout(500);
-      assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMinimized()), true);
+      assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), false);
+      assert.equal(await app.evaluate(({ app }) => app.dock.isVisible()), false);
       assert.equal((await invoke('state')).state.playing, true);
     } else {
       assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), false);
       assert.equal(execFileSync('playerctl', ['-p', 'yamp_test', 'status'], { encoding: 'utf8' }).trim(), 'Playing');
     }
     await app.evaluate(({ app }) => app.emit('second-instance'));
+    if (process.platform === 'darwin') {
+      await app.evaluate(async ({ app, BrowserWindow }) => {
+        const deadline = Date.now() + 3000;
+        while ((!app.dock.isVisible() || !BrowserWindow.getAllWindows()[0].isVisible()) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 25));
+      });
+      assert.equal(await app.evaluate(({ app }) => app.dock.isVisible()), true);
+    }
     assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), true);
     if (process.platform === 'darwin') {
       await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.find(item => item.label === 'Reproducción').submenu.items[0].click());

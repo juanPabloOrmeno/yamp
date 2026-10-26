@@ -2,6 +2,42 @@ const $ = id => document.getElementById(id);
 let state = {}, listKey = '', filterKey = '', compact = false, messageUntil = 0;
 let localKey = '', managing = false;
 const selectedLocal = new Set();
+const visualizer = $('visualizer');
+const meter = visualizer.getContext('2d');
+const levels = Array.from({ length: 24 }, () => ({ rms: 0, peak: 0 }));
+let targets = Array(24).fill(0), previousFrame = 0;
+let lastLevels = 0;
+function drawLevels() {
+  meter.clearRect(0, 0, 144, 30);
+  levels.forEach(({ rms, peak }, index) => {
+    const height = Math.round(rms * 10);
+    for (let step = 0; step < 10; step++) {
+      meter.fillStyle = step < height ? (step > 7 ? '#d4ef83' : step > 4 ? '#a4da61' : '#609f42') : '#172b18';
+      meter.fillRect(index * 6, 28 - step * 3, 4, 2);
+    }
+    if (peak > 0) {
+      meter.fillStyle = '#d7ffa4';
+      meter.fillRect(index * 6, Math.max(0, 28 - Math.round(peak * 9) * 3), 4, 1);
+    }
+  });
+}
+window.yamp.onLevels(({ bands }) => {
+  lastLevels = performance.now();
+  targets = Array.from({ length: 24 }, (_, i) => Math.max(0, Math.min(1, Number(bands?.[i]) || 0)));
+});
+function animateLevels(now) {
+  const elapsed = Math.min(0.1, (now - previousFrame) / 1000 || 0);
+  previousFrame = now;
+  levels.forEach((bar, index) => {
+    const target = now - lastLevels > 250 ? 0 : targets[index];
+    // Each frequency stays in its column: fast attack, smooth vertical decay.
+    bar.rms = target > bar.rms ? target : Math.max(target, bar.rms - elapsed * 1.8);
+    bar.peak = Math.max(bar.rms, bar.peak - elapsed * 0.7);
+  });
+  drawLevels();
+  requestAnimationFrame(animateLevels);
+}
+requestAnimationFrame(animateLevels);
 let playlistsKey = '', savingPlaylist = false;
 function renderPlaylists() {
   $('confirm-playlist').disabled = savingPlaylist || !state.queue?.length;

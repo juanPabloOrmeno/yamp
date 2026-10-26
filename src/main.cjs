@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, globalShortcut, Tray, nativeImage } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const ChromeMusic = require('./chrome.cjs');
@@ -13,6 +13,7 @@ app.setName('YAMP');
 if (process.platform === 'linux') app.setDesktopName('yamp.desktop');
 app.setPath('userData', test ? process.env.YAMP_TEST_PROFILE : path.join(app.getPath('appData'), 'yamp'));
 let mini, player, catalogue, chrome, mpris, timer, quitting = false;
+let tray;
 let mode = 'catalogue', catalogueBusy = false;
 let localBusy = false;
 let enqueueBusy = false;
@@ -70,15 +71,38 @@ function setupMpris() {
   } catch (error) { console.error('MPRIS no disponible:', error.message); }
 }
 
-function showWindow() {
+async function showWindow() {
+  if (quitting) return;
   if (!mini || mini.isDestroyed()) return;
+  if (process.platform === 'darwin' && !app.dock.isVisible()) await app.dock.show();
+  if (quitting || mini.isDestroyed()) return;
   if (mini.isMinimized()) mini.restore();
   mini.show(); mini.focus();
+}
+
+function minimizeWindow() {
+  if (!mini || mini.isDestroyed()) return;
+  mini.hide();
+  if (process.platform === 'darwin' && tray) app.dock.hide();
 }
 
 function setupMac() {
   if (process.platform !== 'darwin') return;
   const perform = action => () => transport(action).catch(error => { player.error = error.message; refresh(); });
+  const icon = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'trayTemplate.png'));
+  icon.setTemplateImage(true);
+  tray = new Tray(icon);
+  tray.setToolTip('YAMP');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Mostrar YAMP', click: showWindow },
+    { type: 'separator' },
+    { label: 'Reproducir / Pausar', click: perform('toggle') },
+    { label: 'Anterior', click: perform('previous') },
+    { label: 'Siguiente', click: perform('next') },
+    { type: 'separator' },
+    { label: 'Salir de YAMP', click: () => app.quit() }
+  ]));
+  tray.on('double-click', showWindow);
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: 'YAMP', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] },
     { label: 'Edición', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
@@ -87,7 +111,7 @@ function setupMac() {
       { label: 'Anterior', accelerator: 'Command+Left', click: perform('previous') },
       { label: 'Siguiente', accelerator: 'Command+Right', click: perform('next') }
     ] },
-    { label: 'Ventana', submenu: [{ role: 'minimize' }, { label: 'Mostrar YAMP', click: showWindow }, { role: 'front' }] }
+    { label: 'Ventana', submenu: [{ label: 'Minimizar a la barra superior', accelerator: 'Command+M', click: minimizeWindow }, { label: 'Mostrar YAMP', click: showWindow }, { role: 'front' }] }
   ]));
   app.dock.setMenu(Menu.buildFromTemplate([
     { label: 'Mostrar YAMP', click: showWindow },
@@ -112,6 +136,9 @@ else {
       catalogue = new FixtureCatalogue(); player = new NativePlayer(directory, resolver);
     } else player = new NativePlayer(directory);
     player.on('change', refresh);
+    player.engine.on('levels', levels => {
+      if (mini && !mini.isDestroyed() && mini.isVisible() && !mini.isMinimized()) mini.webContents.send('yamp:levels', levels);
+    });
     await player.start();
     playlists = new Playlists(directory); await playlists.start();
     libraryDownload = new LibraryDownload(catalogue, player);
@@ -124,6 +151,10 @@ else {
     mini.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     mini.webContents.on('will-navigate', event => event.preventDefault());
     mini.on('closed', () => app.quit());
+    if (process.platform === 'darwin') mini.on('minimize', event => {
+      event.preventDefault();
+      minimizeWindow();
+    });
     ipcMain.handle('yamp:command', async (event, action, value) => {
       if (event.sender !== mini.webContents || event.senderFrame !== mini.webContents.mainFrame || event.senderFrame.url !== uiURL) throw new Error('Origen inválido');
       try {
@@ -209,7 +240,7 @@ else {
             break;
           }
           case 'pin': mini.setAlwaysOnTop(!mini.isAlwaysOnTop()); break;
-           case 'minimize': process.platform === 'darwin' ? mini.minimize() : mini.hide(); break;
+           case 'minimize': minimizeWindow(); break;
           case 'close': app.quit(); break;
            case 'compact': mini.setSize(420, value === true ? 223 : 500); break;
           case 'volume':
@@ -260,6 +291,7 @@ app.on('before-quit', event => {
   if (quitting) return;
   quitting = true; clearInterval(timer);
   globalShortcut.unregisterAll();
+  tray?.destroy();
   libraryDownload?.stop();
   event.preventDefault();
   Promise.allSettled([player?.close(), chrome?.close()]).finally(() => app.quit());
