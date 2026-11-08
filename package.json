@@ -9,6 +9,7 @@
     "start": "node src/launch.cjs",
     "dist:mac": "node scripts/build-mac.cjs",
     "dist:win": "node scripts/build-win.cjs",
+    "dist:linux": "node scripts/build-linux.cjs",
     "test": "node --test tests/*.test.cjs",
     "check": "node --check src/launch.cjs && node --check src/main.cjs && node --check src/chrome.cjs && node --check src/mpv.cjs && node --check src/audio-cache.cjs && node --check src/library-download.cjs && node --check src/local-libraries.cjs && node --check src/playlists.cjs && node --check src/native-player.cjs && node --check src/catalogue.cjs && node --check src/spotify.cjs && node --check src/auth-session.cjs && node --check src/preload.cjs && node --check src/renderer.js"
   },

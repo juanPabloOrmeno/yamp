@@ -5,6 +5,20 @@ Music abiertos para buscar, consultar tu biblioteca o reproducir música.**
 
 ## Uso
 
+### Descargas
+
+Los instaladores están en [GitHub Releases](https://github.com/juanPabloOrmeno/yamp/releases).
+La publicación de escritorio reúne Windows (EXE), macOS Intel y Apple Silicon
+(DMG), y Linux x64 (AppImage, DEB y RPM), junto con `SHA256SUMS.txt`.
+Android se publica por separado como APK preliminar de prueba.
+
+En Linux, instala el DEB/RPM con el gestor de paquetes para resolver las
+dependencias. Para AppImage, instala primero `mpv` y `yt-dlp`, otorga permiso
+de ejecución al archivo y ábrelo.
+
+El workflow **Instaladores y releases** compila en runners de cada plataforma.
+Se puede lanzar manualmente desde Actions o publicando una etiqueta `v*`.
+
 ### Windows
 
 Ejecuta **`dist/YAMP-0.2.0-windows-x64-setup.exe`** en Windows 10/11 de 64 bits.

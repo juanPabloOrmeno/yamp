@@ -1,0 +1,141 @@
+name: Instaladores y releases
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths: [.github/workflows/release.yml]
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+          - os: macos-15
+            platform: mac
+          - os: macos-15-intel
+            platform: mac
+          - os: ubuntu-24.04
+            platform: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Pruebas de catálogo y persistencia
+        run: node --test tests/history.test.cjs tests/library-download.test.cjs tests/local-libraries.test.cjs tests/playlists.test.cjs tests/spotify.test.cjs
+      - if: runner.os == 'macOS'
+        run: brew install mpv
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+      - run: npm run dist:${{ matrix.platform }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.rpm
+
+  android:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: bash gradlew :app:assembleDebug
+        working-directory: android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          if-no-files-found: error
+          path: android/app/build/outputs/apk/debug/*.apk
+
+  publish:
+    needs: [desktop, android]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: installers
+      - uses: actions/download-artifact@v4
+        with:
+          name: android
+          path: android-installer
+      - name: Preparar notas y checksums
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          ANDROID_VERSION=$(sed -n "s/.*versionName '\([^']*\)'.*/\1/p" android/app/build.gradle)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "ANDROID_VERSION=$ANDROID_VERSION" >> "$GITHUB_ENV"
+          (cd installers && sha256sum * > SHA256SUMS.txt)
+          mv android-installer/app-debug.apk "android-installer/YAMP-${ANDROID_VERSION}-android-debug.apk"
+          (cd android-installer && sha256sum *.apk > SHA256SUMS.txt)
+          cat > desktop-notes.md <<'NOTES'
+          ## Instalación
+          | Sistema | Archivo |
+          | --- | --- |
+          | Windows 10/11, x64 | `windows-x64-setup.exe` |
+          | macOS, Apple Silicon | `mac-arm64.dmg` |
+          | macOS, Intel | `mac-x64.dmg` |
+          | Linux, x64 (portable) | `linux-x64.AppImage` |
+          | Debian / Ubuntu, x64 | `linux-x64.deb` |
+          | Fedora / derivados, x64 | `linux-x64.rpm` |
+
+          Windows y macOS incluyen mpv y yt-dlp. En Linux se requieren mpv y yt-dlp; los paquetes DEB/RPM declaran esas dependencias. Para AppImage, instálalos con el gestor de paquetes y otorga permiso de ejecución al archivo.
+
+          macOS: arrastra YAMP a Aplicaciones. Los DMG no están notarizados; si el sistema bloquea la apertura, utiliza Ajustes del Sistema → Privacidad y seguridad. La versión mínima se comprueba al abrir la aplicación y depende de las bibliotecas de mpv incluidas.
+
+          Incluye biblioteca local, playlists, respaldo/restauración y Spotify como fuente de catálogo. Chrome se utiliza para autenticar YouTube Music.
+
+          `SHA256SUMS.txt` permite verificar la integridad de las descargas. Android se publica por separado.
+          NOTES
+          cat > android-notes.md <<'NOTES'
+          APK preliminar para Android 8.0 o posterior. Usa YouTube Music mediante WebView; sus funciones difieren de la versión de escritorio.
+
+          Compilación de prueba (debug), firmada con una clave temporal del runner. Para actualizar desde una compilación con otra firma puede ser necesario desinstalar la anterior, perdiendo los datos locales. No es una versión de producción ni de Play Store.
+          NOTES
+      - name: Crear borradores y cargar instaladores
+        run: |
+          gh release create "v$VERSION" installers/* --draft --target "$GITHUB_SHA" --title "YAMP $VERSION — Windows, macOS y Linux" --notes-file desktop-notes.md
+          gh release create "android-v$ANDROID_VERSION" android-installer/* --draft --prerelease --target "$GITHUB_SHA" --title "YAMP Android $ANDROID_VERSION — Prueba" --notes-file android-notes.md
+      - name: Reemplazar publicación antigua y publicar
+        run: |
+          if gh release view 0.2.0 > /dev/null 2>&1; then
+            gh release delete 0.2.0 --yes
+          fi
+          gh release edit "android-v$ANDROID_VERSION" --draft=false
+          gh release edit "v$VERSION" --draft=false --latest
