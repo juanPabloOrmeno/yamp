@@ -5,6 +5,18 @@ Music abiertos para buscar, consultar tu biblioteca o reproducir música.**
 
 ## Uso
 
+### Windows
+
+Ejecuta **`dist/YAMP-0.2.0-windows-x64-setup.exe`** en Windows 10/11 de 64 bits.
+El asistente permite elegir idioma y carpeta, y crea accesos en el escritorio
+y menú Inicio. Incluye mpv y yt-dlp; no necesitas instalar Node.js ni esos motores.
+Google Chrome solo es necesario para conectar la cuenta de YouTube Music.
+Spotify abre la autorización en tu navegador predeterminado.
+
+Los datos y librerías se guardan en `%APPDATA%\yamp`. El botón **_** oculta YAMP
+en la bandeja del sistema; pulsa su icono para recuperarlo. Desinstalar conserva
+los datos locales. Este instalador no tiene firma digital de editor.
+
 ### macOS
 
 Abre `dist/YAMP-0.2.0-mac-arm64.dmg` y arrastra **YAMP** a **Aplicaciones**.
@@ -89,6 +101,10 @@ Abre **ϟ YAMP** desde Waybar, busca **YAMP** en aplicaciones o ejecuta `~/.loca
 - **×**: cierra YAMP y su motor de audio.
 - **_**: oculta la ventana y mantiene la reproducción en Waybar. Pulsa **ϟ YAMP**
   en la barra superior para volver a mostrarla.
+- El icono de YAMP en la bandeja de Waybar incluye un menú para mostrar la ventana,
+  reproducir/pausar, cambiar de canción y salir.
+- El visualizador muestra 24 bandas de frecuencia del audio real, también en modo
+  compacto y sin conexión. Las barras bajan al pausar, silenciar o detener.
 
 ## Cuenta: Chrome solo para autenticar
 
@@ -101,6 +117,64 @@ No se usa tu perfil habitual de Chrome ni se guarda tu contraseña. La sesión
 persistente permite arrancar y reproducir sin abrir el navegador. Si caduca,
 repite los pasos anteriores. La sesión que ya existía en el perfil de YAMP fue
 migrada durante esta actualización.
+
+## Librerías locales
+
+Pulsa **LIBRERÍAS** en el encabezado del catálogo para crear tus propias
+colecciones, renombrarlas, eliminarlas y quitar canciones seleccionadas.
+Estas librerías son independientes de tu cuenta y pueden mezclar canciones
+añadidas desde YouTube Music y Spotify.
+
+- **AÑADIR COLA** incorpora las canciones de la cola actual.
+- **+ LIB**, junto a cada canción del catálogo, cola, LOCAL o HISTORIAL, abre
+  el selector de librería: elige una (o créala) y pulsa **AÑADIR ESTA CANCIÓN**.
+- **AÑADIR LISTA VISIBLE** incorpora las canciones del catálogo abierto (incluidas
+  sus páginas adicionales), LOCAL o HISTORIAL. Abre primero el álbum, playlist o
+  búsqueda que quieras incorporar. Las canciones repetidas se omiten.
+- Al añadir canciones, el audio pendiente se guarda en segundo plano. El menú
+  muestra cuántas están **sin conexión** y cuántas siguen **pendientes**.
+- **GUARDAR AUDIO** reintenta los pendientes; mantén YAMP abierto hasta terminar.
+- **CARGAR COLA** reemplaza la cola con la librería; **AÑADIR A COLA** conserva la
+  cola actual. Usa los controles habituales para reproducir.
+
+Una canción puede pertenecer a varias librerías y comparte el mismo archivo de
+audio. Eliminar una librería o quitar canciones de ella conserva los archivos;
+**ADMINISTRAR** permite borrar el audio del disco. Si lo borras, las canciones
+siguen en sus librerías como pendientes. Las colecciones se conservan al reiniciar
+en `local-libraries.json`, dentro de la carpeta de datos de YAMP.
+Las canciones incorporadas desde Spotify siguen usando coincidencias de audio
+de YouTube Music, como se explica a continuación.
+
+## Spotify como fuente de datos
+
+El selector junto al buscador permite elegir **YouTube** o **Spotify**. Spotify
+aporta búsquedas de canciones, tus favoritas de INICIO y tu BIBLIOTECA (canciones
+guardadas, playlists y álbumes), con paginación y **AGREGAR TODO A LA COLA**.
+
+1. Selecciona **Spotify → CUENTA ↗**. La primera vez, abre **Configuración inicial**.
+2. Pulsa **ABRIR SPOTIFY DEVELOPERS** y crea una aplicación. Usa **COPIAR REDIRECT
+   URI** para registrar exactamente `http://127.0.0.1:43821/callback`.
+3. Pega su **Client ID** y pulsa **INICIAR SESIÓN EN SPOTIFY**.
+4. YAMP abre el enlace de autorización preparado: inicia sesión y autoriza la cuenta.
+   La conexión se completa automáticamente. No necesitas Client Secret.
+
+Después de conectar, el Client ID queda guardado y la configuración se oculta.
+Para volver a autorizar, basta con **INICIAR SESIÓN EN SPOTIFY**. La sesión normal
+se renueva automáticamente, sin repetir el login en cada inicio.
+
+La aplicación usa OAuth PKCE; renueva la sesión automáticamente y la guarda en
+`spotify-session.json` con permisos 0600, sin exponer los tokens a la interfaz.
+**DESCONECTAR** elimina los tokens locales. Las aplicaciones en modo desarrollo
+están sujetas a los requisitos de cuenta y usuarios autorizados de Spotify.
+Spotify puede restringir el acceso al contenido de playlists ajenas.
+
+**El audio sigue viniendo de YouTube Music, no de Spotify.** Al añadir una canción,
+YAMP busca una coincidencia por título, artista y duración. Si no encuentra una
+coincidencia fiable, muestra un error; busca entonces la canción desde YouTube.
+La edición puede variar. La cola muestra los metadatos del audio encontrado y
+conserva su funcionamiento habitual: reproducción nativa, playlists y audio local.
+**♥** guarda en Spotify las canciones añadidas desde esa fuente. Guardar bibliotecas
+usa la fuente seleccionada; no se puede cambiar mientras se está descargando.
 
 ## Arquitectura
 
@@ -147,6 +221,20 @@ usa un perfil temporal de Chrome. Capturas en `test-results/`.
 
 En macOS, instala `mpv` y `yt-dlp` con `brew install mpv yt-dlp` para desarrollar.
 Las pruebas usan Chrome y mpv reales; D-Bus y `playerctl` solo se usan en Linux.
+
+### Generar instalador para Windows
+
+```sh
+npm ci
+npm run dist:win
+```
+
+Se puede generar desde Windows o desde Linux con Wine. El script descarga
+versiones fijadas de mpv x64 y yt-dlp, verifica sus SHA-256 y crea un instalador
+NSIS en `dist/`. `dist/windows-SHA256SUMS.txt` contiene el hash del instalador.
+`build/win-resources/runtime-manifest.json` registra las URLs y hashes de los
+componentes incluidos. El motor de Windows y su visualizador se han probado
+con Wine; la instalación completa todavía debe validarse en Windows real.
 
 ### Generar instalador para macOS
 

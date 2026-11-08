@@ -26,14 +26,15 @@ class AudioEngine extends EventEmitter {
   }
   async start() {
     this.directory = await fs.mkdtemp(path.join(os.tmpdir(), 'yamp-audio-'));
-    const socketPath = path.join(this.directory, 'ipc.sock');
+    const socketPath = process.platform === 'win32' ? `\\\\.\\pipe\\${path.basename(this.directory)}` : path.join(this.directory, 'ipc.sock');
     this.process = spawn(executable('mpv'), [
       '--no-config', '--idle=yes', '--no-video', '--no-terminal', '--audio-display=no',
       '--volume=75', '--ytdl=no', `--input-ipc-server=${socketPath}`
-    ], { stdio: ['ignore', 'ignore', 'ignore', 'pipe'] });
+    ], { windowsHide: true, stdio: process.platform === 'win32' ? ['ignore', 'pipe', 'ignore'] : ['ignore', 'ignore', 'ignore', 'pipe'] });
     let meterBuffer = '', bandDb = -Infinity;
-    this.process.stdio[3].setEncoding('utf8');
-    this.process.stdio[3].on('data', chunk => {
+    const meterStream = process.platform === 'win32' ? this.process.stdout : this.process.stdio[3];
+    meterStream.setEncoding('utf8');
+    meterStream.on('data', chunk => {
       meterBuffer += chunk;
       let end;
       while ((end = meterBuffer.indexOf('\n')) !== -1) {
@@ -87,7 +88,7 @@ class AudioEngine extends EventEmitter {
     });
     for (const [index, name] of Object.keys(this.properties).entries()) await this.command('observe_property', index + 1, name);
     // Measure decoded audio in mpv; the UI never opens a second audio stream.
-    await this.command('af', 'add', `@yamp-meter:lavfi=[${meterFilter()}]`);
+    await this.command('af', 'add', `@yamp-meter:lavfi=[${process.platform === 'win32' ? meterFilter().replaceAll('pipe\\:3', 'pipe\\:1') : meterFilter()}]`);
     this.meterTimer = setInterval(() => this.sampleLevels(), 40);
   }
   async sampleLevels() {

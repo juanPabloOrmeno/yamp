@@ -20,7 +20,7 @@ class Playlists {
   async save(name, queue) {
     if (typeof name !== 'string' || !name.trim() || name.trim().length > 100) throw new Error('Escribe un nombre de hasta 100 caracteres.');
     if (!queue.length) throw new Error('La cola está vacía.');
-    const list = { id: randomUUID(), name: name.trim(), created: new Date().toISOString(), tracks: queue.map(({ id, kind, title, artist, album, duration }) => ({ id, kind, title, artist, album, duration })) };
+    const list = { id: randomUUID(), name: name.trim(), created: new Date().toISOString(), tracks: queue.map(({ id, kind, title, artist, album, duration, spotifyId }) => ({ id, kind, title, artist, album, duration, spotifyId })) };
     const file = path.join(this.directory, `${list.id}.json`);
     try {
       await fs.writeFile(`${file}.part`, JSON.stringify(list), { mode: 0o600 });

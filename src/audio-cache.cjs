@@ -91,7 +91,7 @@ class AudioCache extends EventEmitter {
           if (!info.isFile() || info.size > 1024 * 1024 || !stat.isFile()) throw new Error('Invalid files');
           const row = JSON.parse(await fs.readFile(metadata, 'utf8'));
           if (row.id !== id || !['song', 'video'].includes(row.kind) || typeof row.title !== 'string' || !Number.isSafeInteger(row.bytes) || row.bytes <= 0 || row.bytes !== stat.size) throw new Error('Invalid metadata');
-          rows.push({ id, kind: row.kind, title: row.title, artist: typeof row.artist === 'string' ? row.artist : '', album: typeof row.album === 'string' ? row.album : '', duration: Number.isFinite(row.duration) && row.duration >= 0 ? row.duration : 0, bytes: row.bytes });
+          rows.push({ id, kind: row.kind, title: row.title, artist: typeof row.artist === 'string' ? row.artist : '', album: typeof row.album === 'string' ? row.album : '', duration: Number.isFinite(row.duration) && row.duration >= 0 ? row.duration : 0, spotifyId: typeof row.spotifyId === 'string' ? row.spotifyId : undefined, bytes: row.bytes });
         } catch { invalid++; }
       }
       if (!rows.length) throw new Error('No hay canciones válidas en esta carpeta. Elige una carpeta YAMP-respaldo-*.');
@@ -135,7 +135,7 @@ class AudioCache extends EventEmitter {
         const { size } = await fs.stat(partial);
         const expected = response.headers.get('content-length');
         if (!size || (expected !== null && size !== Number(expected))) throw new Error('Incomplete audio');
-        const row = { id: track.id, kind: track.kind, title: track.title, artist: track.artist || '', album: track.album || '', duration: audio.duration || track.duration || 0, bytes: size };
+        const row = { id: track.id, kind: track.kind, title: track.title, artist: track.artist || '', album: track.album || '', duration: audio.duration || track.duration || 0, spotifyId: track.spotifyId, bytes: size };
         await fs.writeFile(metadata, JSON.stringify(row), { mode: 0o600 });
         await fs.rename(partial, this.file(track.id));
         await fs.rename(metadata, this.file(track.id, 'json'));

@@ -1,12 +1,14 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, globalShortcut, Tray, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, globalShortcut, Tray, nativeImage, shell, clipboard } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const ChromeMusic = require('./chrome.cjs');
 const { saveSession } = require('./auth-session.cjs');
 const { NativePlayer } = require('./native-player.cjs');
 const { Catalogue } = require('./catalogue.cjs');
+const { Spotify, REDIRECT } = require('./spotify.cjs');
 const LibraryDownload = require('./library-download.cjs');
 const Playlists = require('./playlists.cjs');
+const LocalLibraries = require('./local-libraries.cjs');
 
 const test = process.env.YAMP_TEST === '1';
 app.setName('YAMP');
@@ -14,18 +16,21 @@ if (process.platform === 'linux') app.setDesktopName('yamp.desktop');
 app.setPath('userData', test ? process.env.YAMP_TEST_PROFILE : path.join(app.getPath('appData'), 'yamp'));
 let mini, player, catalogue, chrome, mpris, timer, quitting = false;
 let tray;
+let youtube, spotify, source = 'youtube';
 let mode = 'catalogue', catalogueBusy = false;
 let localBusy = false;
 let enqueueBusy = false;
 let libraryDownload;
 let playlists;
+let localLibraries, librariesBusy = false;
 let state = { ready: false, queue: [], volume: 0.75 };
 const uiURL = pathToFileURL(path.join(__dirname, 'index.html')).href;
 
 function refresh() {
   if (!player || !mini || mini.isDestroyed()) return;
   state = {
-    ...player.snapshot(), pinned: mini.isAlwaysOnTop(), mode,
+    ...player.snapshot(), pinned: mini.isAlwaysOnTop(), mode, source, spotify: spotify?.status,
+    localLibraries: localLibraries?.snapshot(player.cache) || [], librariesBusy,
      catalogue: mode === 'history' ? player.history.view : mode === 'local' ? player.cache.view : catalogue.view, catalogueBusy, authenticating: !!chrome?.process,
      localLibrary: player.cache.view, localBusy, enqueueBusy, libraryDownload: libraryDownload?.state, playlists: playlists?.summaries || []
   };
@@ -44,7 +49,9 @@ async function transport(action, value) {
   if (action === 'like') {
     const id = player.snapshot().id;
     if (!id) throw new Error('Selecciona una canción primero.');
-    await catalogue.like(id);
+    const track = player.queue[player.index];
+    if (track?.spotifyId) await spotify.like(track.spotifyId);
+    else await youtube.like(id);
   } else await player.run(action, value);
   refresh();
 }
@@ -61,7 +68,7 @@ function setupMpris() {
     mpris.on('error', error => console.error('MPRIS:', error.message));
     const perform = (action, value) => transport(action, value).catch(error => { player.error = error.message; refresh(); });
     for (const [event, action] of Object.entries({ play: 'play', pause: 'pause', playpause: 'toggle', stop: 'stop', next: 'next', previous: 'previous' })) mpris.on(event, () => perform(action));
-    mpris.on('raise', () => { mini.show(); mini.focus(); });
+    mpris.on('raise', showWindow);
     mpris.on('quit', () => app.quit());
     mpris.on('seek', offset => perform('seek', Math.max(0, state.time + offset / 1e6)));
     mpris.on('position', event => perform('seek', Math.max(0, event.position / 1e6)));
@@ -86,11 +93,11 @@ function minimizeWindow() {
   if (process.platform === 'darwin' && tray) app.dock.hide();
 }
 
-function setupMac() {
-  if (process.platform !== 'darwin') return;
+function setupTray() {
+  if (!['darwin', 'linux', 'win32'].includes(process.platform)) return;
   const perform = action => () => transport(action).catch(error => { player.error = error.message; refresh(); });
-  const icon = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'trayTemplate.png'));
-  icon.setTemplateImage(true);
+  const icon = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', process.platform === 'darwin' ? 'trayTemplate.png' : 'tray.png'));
+  if (process.platform === 'darwin') icon.setTemplateImage(true);
   tray = new Tray(icon);
   tray.setToolTip('YAMP');
   tray.setContextMenu(Menu.buildFromTemplate([
@@ -103,6 +110,12 @@ function setupMac() {
     { label: 'Salir de YAMP', click: () => app.quit() }
   ]));
   tray.on('double-click', showWindow);
+  if (process.platform !== 'darwin') tray.on('click', showWindow);
+}
+
+function setupMac() {
+  if (process.platform !== 'darwin') return;
+  const perform = action => () => transport(action).catch(error => { player.error = error.message; refresh(); });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: 'YAMP', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] },
     { label: 'Edición', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
@@ -135,12 +148,15 @@ else {
       const { FixtureCatalogue, resolver } = require('../tests/fixtures.cjs');
       catalogue = new FixtureCatalogue(); player = new NativePlayer(directory, resolver);
     } else player = new NativePlayer(directory);
+    youtube = catalogue;
+    spotify = new Spotify(directory, youtube); await spotify.start();
     player.on('change', refresh);
     player.engine.on('levels', levels => {
       if (mini && !mini.isDestroyed() && mini.isVisible() && !mini.isMinimized()) mini.webContents.send('yamp:levels', levels);
     });
     await player.start();
     playlists = new Playlists(directory); await playlists.start();
+    localLibraries = new LocalLibraries(directory); await localLibraries.start();
     libraryDownload = new LibraryDownload(catalogue, player);
     libraryDownload.on('change', refresh);
     mini = new BrowserWindow({
@@ -160,19 +176,91 @@ else {
       try {
         switch (action) {
           case 'state': refresh(); return { ok: true, state };
+          case 'create-local-library': case 'rename-local-library': case 'delete-local-library':
+          case 'add-local-library': case 'remove-library-tracks': case 'download-local-library': case 'load-local-library': {
+            if (librariesBusy) throw new Error('Espera a que termine la operación de librerías.');
+            librariesBusy = true; refresh();
+            try {
+              if (action === 'create-local-library') {
+                const id = await localLibraries.create(value); return { ok: true, id };
+              }
+              if (!value || typeof value.id !== 'string') throw new Error('Selecciona una librería.');
+              localLibraries.list(value.id);
+              if (action === 'rename-local-library') await localLibraries.rename(value.id, value.name);
+              else if (action === 'delete-local-library') await localLibraries.remove(value.id);
+              else if (action === 'remove-library-tracks') await localLibraries.removeTracks(value.id, value.tracks);
+              else if (action === 'download-local-library') {
+                if (localBusy) throw new Error('Espera a que termine la operación de archivos locales.');
+                libraryDownload.enqueue(localLibraries.tracks(value.id));
+              } else if (action === 'load-local-library') {
+                const tracks = localLibraries.tracks(value.id);
+                if (!tracks.length) throw new Error('Esta librería está vacía.');
+                if (value.append) player.queue.push(...tracks);
+                else { await player.run('stop'); player.queue = tracks; player.index = -1; player.local = false; player.error = ''; mode = 'queue'; }
+              } else {
+                if (localBusy || catalogueBusy || enqueueBusy) throw new Error('Espera a que termine la operación actual.');
+                let rows;
+                if (value.from === 'queue') rows = player.queue.map(row => ({ ...row }));
+                else if (value.from === 'track') {
+                  if (value.mode !== mode || value.source !== source) throw new Error('La lista cambió. Selecciona la canción de nuevo.');
+                  let row;
+                  if (mode === 'queue') {
+                    row = Number.isInteger(value.selection?.index) ? player.queue[value.selection.index] : null;
+                  } else {
+                    const provider = mode === 'local' ? player.cache : mode === 'history' ? player.history : catalogue;
+                    row = provider.selected(value.selection);
+                  }
+                  if (!row || row.id !== value.trackId) throw new Error('La lista cambió. Selecciona la canción de nuevo.');
+                  rows = [{ ...row }];
+                }
+                else if (value.from === 'view') {
+                  if (value.mode !== mode || value.source !== source || mode === 'queue') throw new Error('La lista cambió. Intenta de nuevo.');
+                  const view = mode === 'local' ? player.cache.view : mode === 'history' ? player.history.view : catalogue.view;
+                  if (value.revision !== view.revision) throw new Error('La lista cambió. Intenta de nuevo.');
+                  const selectedCatalogue = catalogue;
+                  rows = mode === 'catalogue' ? await selectedCatalogue.allSongs() : view.items;
+                } else throw new Error('Origen de canciones inválido.');
+                const tracks = [];
+                for (const row of rows) if (['song', 'video'].includes(row.kind)) tracks.push(await spotify.playable(row));
+                const added = await localLibraries.add(value.id, tracks);
+                libraryDownload.enqueue(tracks);
+                return { ok: true, message: `${added} canción(es) añadida(s). El audio pendiente se guardará en segundo plano.` };
+              }
+            } finally { librariesBusy = false; refresh(); }
+            break;
+          }
+          case 'source':
+            if (!['youtube', 'spotify'].includes(value)) throw new Error('Fuente inválida.');
+            if (catalogueBusy || enqueueBusy || libraryDownload.state.running) throw new Error('Espera a que termine la operación actual antes de cambiar de fuente.');
+            source = value; catalogue = source === 'spotify' ? spotify : youtube;
+            libraryDownload.catalogue = catalogue;
+            await browse(() => catalogue.home()); break;
+          case 'spotify-login':
+            await spotify.login(value, url => shell.openExternal(url));
+            if (source === 'spotify') await browse(() => spotify.library());
+            break;
+          case 'spotify-setup':
+            await shell.openExternal('https://developer.spotify.com/dashboard'); break;
+          case 'spotify-copy-redirect':
+            clipboard.writeText(REDIRECT); break;
+          case 'spotify-disconnect':
+            if (catalogueBusy || enqueueBusy || libraryDownload.state.running) throw new Error('Espera a que termine la operación actual.');
+            await spotify.disconnect(); break;
           case 'music': case 'home': await browse(() => catalogue.home()); break;
           case 'library': await browse(() => catalogue.library()); break;
            case 'show-queue': mode = 'queue'; break;
            case 'history': mode = 'history'; break;
            case 'enqueue-all': {
              if (enqueueBusy) throw new Error('Ya se está agregando una lista.');
-             if (!value || value.mode !== mode || mode === 'queue') throw new Error('La lista cambió. Intenta de nuevo.');
+              if (!value || value.mode !== mode || mode === 'queue' || (value.source && value.source !== source)) throw new Error('La lista cambió. Intenta de nuevo.');
              const view = mode === 'local' ? player.cache.view : mode === 'history' ? player.history.view : catalogue.view;
              if (value.revision !== view.revision || (mode === 'catalogue' && catalogueBusy)) throw new Error('La lista cambió o está cargando. Intenta de nuevo.');
              enqueueBusy = true; refresh();
              try {
                const rows = mode === 'catalogue' ? await catalogue.allSongs() : view.items;
-               for (const row of rows) if (['song', 'video'].includes(row.kind)) player.queue.push({ ...row });
+               const tracks = [];
+               for (const row of rows) if (['song', 'video'].includes(row.kind)) tracks.push(await spotify.playable(row));
+               player.queue.push(...tracks.map(row => ({ ...row })));
              } finally { enqueueBusy = false; refresh(); }
              break;
            }
@@ -188,7 +276,8 @@ else {
              if (localBusy) throw new Error('Espera a que termine la operación local.');
              libraryDownload.start(); break;
            case 'stop-library-download': libraryDownload.stop(); break;
-           case 'delete-local': case 'backup-local': case 'restore-local': {
+            case 'delete-local': case 'backup-local': case 'restore-local': {
+              if (librariesBusy) throw new Error('Espera a que termine la operación de librerías.');
              if (localBusy) throw new Error('Espera a que termine la operación local.');
              if (libraryDownload.state.running) throw new Error('Detén primero el guardado de bibliotecas.');
              if (action !== 'restore-local') player.cache.selection(value);
@@ -221,11 +310,15 @@ else {
             await browse(() => catalogue.search(value.trim())); break;
           case 'filter': if (typeof value !== 'string') throw new Error('Filtro inválido'); await browse(() => catalogue.filter(value)); break;
           case 'more': await browse(() => catalogue.more()); break;
-          case 'open-item': case 'enqueue': {
-            const row = catalogue.selected(value);
-            if (['song', 'video'].includes(row.kind)) {
-              if (action === 'enqueue') player.queue.push({ ...row });
-               else player.playTrack(row);
+           case 'open-item': case 'enqueue': {
+             if (catalogueBusy || (value?.source && value.source !== source)) throw new Error('La lista cambió o está cargando. Intenta de nuevo.');
+             const row = catalogue.selected(value);
+             if (['song', 'video'].includes(row.kind)) {
+               await browse(async () => {
+                 const track = await spotify.playable(row);
+                 if (action === 'enqueue') player.queue.push({ ...track });
+                 else player.playTrack(track);
+               });
             } else await browse(() => catalogue.open(row));
             break;
           }
@@ -234,8 +327,8 @@ else {
             if (!chrome.process) throw new Error('Pulsa CUENTA para iniciar sesión primero.');
             const { cookies } = await chrome.send('Storage.getCookies');
             await saveSession(directory, cookies);
-            catalogue.resetAuth();
-            await browse(() => catalogue.library());
+             youtube.resetAuth();
+             if (source === 'youtube') await browse(() => youtube.library());
             await chrome.close();
             break;
           }
@@ -277,7 +370,7 @@ else {
       } catch (error) { return { ok: false, error: error.message }; }
     });
     await mini.loadFile(path.join(__dirname, 'index.html'));
-    mini.show(); setupMpris(); setupMac(); refresh();
+    mini.show(); setupMpris(); setupTray(); setupMac(); refresh();
     browse(() => catalogue.home()).catch(error => {
       if (mode === 'catalogue' && player.cache.view.items.length) mode = 'local';
       if (mode !== 'local') player.error = error.message;
@@ -293,7 +386,8 @@ app.on('before-quit', event => {
   globalShortcut.unregisterAll();
   tray?.destroy();
   libraryDownload?.stop();
+  spotify?.close();
   event.preventDefault();
-  Promise.allSettled([player?.close(), chrome?.close()]).finally(() => app.quit());
+   Promise.allSettled([player?.close(), chrome?.close(), localLibraries?.pending]).finally(() => app.quit());
 });
 app.on('window-all-closed', () => app.quit());

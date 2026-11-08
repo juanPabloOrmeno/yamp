@@ -108,3 +108,18 @@ dialog p { line-height: 1.5; }
 .saved-playlist span { overflow-wrap: anywhere; min-width: 0; }
 .saved-playlist button { flex-shrink: 0; font-size: 9px; }
 .playlist-buttons { display: flex; gap: 5px; flex-shrink: 0; }
+#source { background: #171e18; color: var(--green); font: 9px monospace; max-width: 80px; border: 1px solid #5d6858; }
+#search { min-width: 0; }
+#spotify-client { min-width: 0; flex: 1; background: #090f0d; color: var(--green); border: 1px solid #666c79; padding: 4px; }
+.selectable { user-select: text; }
+#show-libraries { font-size: 8px; height: 18px; flex-shrink: 0; padding: 0 4px; }
+.section-title #list-title { min-width: 0; }
+#library-select { width: 100%; margin-top: 12px; padding: 5px; background: #090f0d; color: var(--green); }
+#library-new-name, #library-name { min-width: 0; flex: 1; background: #090f0d; color: var(--green); border: 1px solid #666c79; padding: 4px; }
+.library-buttons { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.library-buttons button, #library-rename-form button { font-size: 8px; }
+#library-tracks { max-height: 150px; overflow-y: auto; background: #090f0d; }
+#libraries-message, #libraries-progress { overflow-wrap: anywhere; }
+#queue li button.add-library { width: 45px; flex: none; justify-content: center; align-items: center; padding: 4px; font-size: 9px; color: #c9d99e; }
+#spotify-connect { width: 100%; margin-top: 12px; height: 30px; background: linear-gradient(#b9c88e, #7b8c5e); }
+#spotify-setup summary { cursor: pointer; padding: 6px 0; color: var(--green); }

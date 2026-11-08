@@ -1,7 +1,126 @@
 const $ = id => document.getElementById(id);
 let state = {}, listKey = '', filterKey = '', compact = false, messageUntil = 0;
+let connectingSpotify = false;
+$('source').addEventListener('change', async event => {
+  await command('source', event.target.value);
+  const result = await command('state'); if (result.state) render(result.state);
+});
+$('account').addEventListener('click', () => {
+  if (state.source !== 'spotify') return command('login');
+  $('spotify-client').value = state.spotify?.clientId || '';
+  $('spotify-setup').open = !state.spotify?.clientId;
+  $('spotify-message').textContent = state.spotify?.connected ? 'Cuenta conectada.' : 'Conecta tu cuenta para buscar y consultar tu biblioteca.';
+  $('spotify-dialog').showModal();
+});
+$('close-spotify').addEventListener('click', () => $('spotify-dialog').close());
+$('spotify-client').addEventListener('invalid', () => { $('spotify-setup').open = true; });
+$('spotify-copy-redirect').addEventListener('click', async () => {
+  const result = await command('spotify-copy-redirect');
+  $('spotify-message').textContent = result.ok ? 'Dirección copiada. Pégala en Redirect URIs de tu aplicación de Spotify.' : result.error;
+});
+$('spotify-form').addEventListener('submit', async event => {
+  event.preventDefault(); if (connectingSpotify) return;
+  connectingSpotify = true; $('spotify-connect').disabled = true;
+  $('spotify-message').textContent = 'Completa la conexión en tu navegador…';
+  try {
+    const result = await command('spotify-login', $('spotify-client').value.trim());
+    $('spotify-message').textContent = result.ok ? 'Spotify conectado. Ya puedes buscar música y abrir tu biblioteca.' : result.error;
+    if (result.ok) $('spotify-setup').open = false;
+  } finally { connectingSpotify = false; $('spotify-connect').disabled = false; }
+});
+$('spotify-disconnect').addEventListener('click', async () => {
+  const result = await command('spotify-disconnect');
+  $('spotify-message').textContent = result.ok ? 'Cuenta desconectada.' : result.error;
+});
 let localKey = '', managing = false;
 const selectedLocal = new Set();
+let libraryId = '', librariesKey = '', libraryTracksKey = '', libraryWorking = false;
+let pendingLibraryTrack = null;
+const selectedLibraryTracks = new Set();
+function currentLibrary() { return (state.localLibraries || []).find(list => list.id === libraryId); }
+function renderLibraries() {
+  const lists = state.localLibraries || [];
+  if (!lists.some(list => list.id === libraryId)) {
+    libraryId = lists[0]?.id || ''; selectedLibraryTracks.clear(); libraryTracksKey = '';
+    $('library-name').value = currentLibrary()?.name || '';
+  }
+  const key = JSON.stringify(lists.map(list => [list.id, list.name]));
+  if (key !== librariesKey) {
+    librariesKey = key;
+    $('library-select').replaceChildren(...(lists.length ? lists.map(list => new Option(list.name, list.id)) : [new Option('Todavía no hay librerías', '')]));
+  }
+  $('library-select').value = libraryId;
+  const list = currentLibrary(), tracks = list?.tracks || [];
+  const busy = libraryWorking || state.librariesBusy;
+  $('library-add-hint').textContent = pendingLibraryTrack
+    ? `Canción: ${pendingLibraryTrack.title}. ${list ? 'Elige la librería y pulsa AÑADIR ESTA CANCIÓN.' : 'Crea una librería para guardar esta canción.'}`
+    : 'Crea o selecciona una librería para añadir canciones desde la cola o la lista visible.';
+  $('library-add-track').hidden = !pendingLibraryTrack;
+  $('library-add-track').disabled = busy || !list || state.localBusy || state.catalogueBusy || state.enqueueBusy;
+  $('library-select').disabled = busy || !lists.length;
+  $('library-create').disabled = busy;
+  $('library-details').hidden = !list;
+  for (const id of selectedLibraryTracks) if (!tracks.some(row => row.id === id)) selectedLibraryTracks.delete(id);
+  for (const id of ['library-rename', 'library-delete', 'library-name']) $(id).disabled = busy;
+  $('library-add-queue').disabled = busy || state.localBusy || !state.queue?.length;
+  $('library-add-view').disabled = busy || state.localBusy || state.catalogueBusy || state.enqueueBusy || state.mode === 'queue' || !state.catalogue?.items?.some(row => ['song', 'video'].includes(row.kind));
+  for (const id of ['library-download', 'library-load', 'library-enqueue']) $(id).disabled = busy || !tracks.length || (id === 'library-download' && state.localBusy);
+  $('library-remove-tracks').disabled = busy || !selectedLibraryTracks.size;
+  $('library-select-all').disabled = busy || !tracks.length;
+  $('library-select-all').checked = !!tracks.length && selectedLibraryTracks.size === tracks.length;
+  $('library-select-all').indeterminate = selectedLibraryTracks.size > 0 && selectedLibraryTracks.size < tracks.length;
+  const local = tracks.filter(row => row.local).length;
+  $('library-summary').textContent = `${tracks.length} canciones · ${local} sin conexión · ${tracks.length - local} pendientes`;
+  const rowsKey = JSON.stringify([libraryId, tracks, [...selectedLibraryTracks], busy]);
+  if (rowsKey !== libraryTracksKey) {
+    libraryTracksKey = rowsKey;
+    $('library-tracks').replaceChildren(...tracks.map(row => {
+      const label = document.createElement('label'); label.className = 'local-track';
+      const check = document.createElement('input'); check.type = 'checkbox'; check.checked = selectedLibraryTracks.has(row.id); check.disabled = busy;
+      check.addEventListener('change', () => { if (check.checked) selectedLibraryTracks.add(row.id); else selectedLibraryTracks.delete(row.id); renderLibraries(); });
+      const title = document.createElement('span'); title.textContent = row.title;
+      const detail = document.createElement('small'); detail.textContent = `${row.artist || ''} · ${row.local ? 'Sin conexión' : 'Audio pendiente'}`;
+      title.append(detail); label.append(check, title); return label;
+    }));
+  }
+  const download = state.libraryDownload;
+  $('libraries-progress').textContent = download?.message ? `${download.message} ${download.title || ''} · ${download.saved} guardadas · ${download.failed} errores` : '';
+}
+async function libraryCommand(action, value) {
+  if (libraryWorking) return;
+  libraryWorking = true; renderLibraries(); $('libraries-message').textContent = 'Procesando…';
+  try {
+    const result = await command(action, value);
+    if (result.id) libraryId = result.id;
+    $('libraries-message').textContent = result.ok ? result.message || 'Listo.' : result.error;
+    const updated = await command('state'); if (updated.state) render(updated.state);
+    $('library-name').value = currentLibrary()?.name || '';
+  } finally { libraryWorking = false; renderLibraries(); }
+}
+$('show-libraries').addEventListener('click', () => {
+  pendingLibraryTrack = null;
+  renderLibraries(); $('library-name').value = currentLibrary()?.name || '';
+  $('libraries-message').textContent = ''; $('libraries-dialog').showModal();
+});
+$('close-libraries').addEventListener('click', () => $('libraries-dialog').close());
+$('library-select').addEventListener('change', event => {
+  libraryId = event.target.value; selectedLibraryTracks.clear(); $('library-name').value = currentLibrary()?.name || ''; renderLibraries();
+});
+$('library-create-form').addEventListener('submit', async event => {
+  event.preventDefault(); await libraryCommand('create-local-library', $('library-new-name').value); $('library-new-name').value = '';
+});
+$('library-rename-form').addEventListener('submit', event => { event.preventDefault(); libraryCommand('rename-local-library', { id: libraryId, name: $('library-name').value }); });
+$('library-delete').addEventListener('click', () => libraryCommand('delete-local-library', { id: libraryId }));
+$('library-select-all').addEventListener('change', event => {
+  selectedLibraryTracks.clear(); if (event.target.checked) for (const row of currentLibrary()?.tracks || []) selectedLibraryTracks.add(row.id); renderLibraries();
+});
+$('library-remove-tracks').addEventListener('click', () => libraryCommand('remove-library-tracks', { id: libraryId, tracks: [...selectedLibraryTracks] }));
+$('library-download').addEventListener('click', () => libraryCommand('download-local-library', { id: libraryId }));
+$('library-add-track').addEventListener('click', () => {
+  if (pendingLibraryTrack) libraryCommand('add-local-library', { ...pendingLibraryTrack, id: libraryId, from: 'track' });
+});
+for (const [id, from] of [['library-add-queue', 'queue'], ['library-add-view', 'view']]) $(id).addEventListener('click', () => libraryCommand('add-local-library', { id: libraryId, from, mode: state.mode, source: state.source, revision: state.catalogue?.revision }));
+for (const [id, append] of [['library-load', false], ['library-enqueue', true]]) $(id).addEventListener('click', () => libraryCommand('load-local-library', { id: libraryId, append }));
 const visualizer = $('visualizer');
 const meter = visualizer.getContext('2d');
 const levels = Array.from({ length: 24 }, () => ({ rms: 0, peak: 0 }));
@@ -146,8 +265,14 @@ async function command(action, value) {
 }
 function render(next) {
   state = next;
+  $('source').value = state.source || 'youtube';
+  $('source').disabled = !!(state.catalogueBusy || state.enqueueBusy || state.libraryDownload?.running);
+  $('source-title').textContent = state.source === 'spotify' ? '· SPOTIFY → YT' : '· YOUTUBE MUSIC';
+  $('search').placeholder = state.source === 'spotify' ? 'Buscar en Spotify…' : 'Buscar en YouTube Music…';
+  $('spotify-disconnect').disabled = connectingSpotify || !!state.spotify?.connecting || !state.spotify?.connected;
   if ($('playlists-dialog').open) renderPlaylists();
   if ($('local-manager').open) renderLocal();
+  if ($('libraries-dialog').open) renderLibraries();
   $('title').textContent = state.title || 'YAMP · TU MÚSICA, A TU MANERA';
   $('title').title = state.title || '';
   $('artist').textContent = state.artist || 'Busca una canción o abre tu biblioteca';
@@ -162,7 +287,7 @@ function render(next) {
   $('repeat').classList.toggle('active', state.repeat !== 'off');
   $('repeat').textContent = state.repeat === 'one' ? 'REP 1' : 'REP';
   $('mute').classList.toggle('active', !!state.muted);
-  $('save-session').hidden = !state.authenticating;
+  $('save-session').hidden = !state.authenticating || state.source === 'spotify';
   if (document.activeElement !== $('seek')) { $('seek').max = state.duration || 100; $('seek').value = state.time || 0; }
   $('seek').disabled = !state.duration || state.loading;
   if (document.activeElement !== $('volume')) $('volume').value = Math.round((state.volume ?? 0.75) * 100);
@@ -190,7 +315,7 @@ function render(next) {
     filterKey = nextFilterKey;
     $('filter').replaceChildren(new Option('Filtrar…', ''), ...filters.map(name => new Option(name, name)));
   }
-  const key = JSON.stringify([state.mode, rows, view.revision, state.id]);
+  const key = JSON.stringify([state.source, state.mode, rows, view.revision, state.id]);
   if (key !== listKey) {
     listKey = key;
     $('queue').replaceChildren(...rows.map((track, index) => {
@@ -205,11 +330,21 @@ function render(next) {
       detail.textContent = track.artist || ({ playlist: 'Playlist', album: 'Álbum', artist: 'Artista' })[track.kind] || '';
       content.append(title, detail); button.append(number, content);
       button.title = [track.title, track.artist].filter(Boolean).join(' — ');
-      const selection = { index, revision: view.revision };
+      const selection = { index, revision: view.revision, source: state.source };
+      const librarySelection = { selection, mode: state.mode, source: state.source, trackId: track.id, title: track.title };
       const local = state.mode === 'local';
       const history = state.mode === 'history';
       button.addEventListener('click', () => isQueue ? command('queue', index) : command(history ? 'open-history' : local ? 'open-local' : 'open-item', selection));
       li.append(button);
+      if (['song', 'video'].includes(track.kind)) {
+        const addLibrary = document.createElement('button'); addLibrary.className = 'add-library'; addLibrary.textContent = '+ LIB';
+        addLibrary.title = 'Añadir canción a una librería local'; addLibrary.setAttribute('aria-label', `Añadir ${track.title} a una librería`);
+        addLibrary.addEventListener('click', () => {
+          pendingLibraryTrack = librarySelection; renderLibraries(); $('library-name').value = currentLibrary()?.name || '';
+          $('libraries-message').textContent = ''; $('libraries-dialog').showModal();
+        });
+        li.append(addLibrary);
+      }
       if (isQueue) {
         const remove = document.createElement('button'); remove.className = 'add-item'; remove.textContent = '×'; remove.title = 'Quitar de la cola'; remove.setAttribute('aria-label', `Quitar ${track.title} de la cola`);
         remove.addEventListener('click', () => command('remove-queue', index)); li.append(remove);
@@ -236,7 +371,7 @@ $('seek').addEventListener('change', event => { command('seek', Number(event.tar
 $('volume').addEventListener('input', event => { $('volume-value').textContent = `${event.target.value}%`; });
 $('volume').addEventListener('change', event => { command('volume', Number(event.target.value) / 100); event.target.blur(); });
 $('search-form').addEventListener('submit', event => { event.preventDefault(); command('search', $('search').value); });
-$('enqueue-all').addEventListener('click', () => command('enqueue-all', { mode: state.mode, revision: state.catalogue.revision }));
+$('enqueue-all').addEventListener('click', () => command('enqueue-all', { mode: state.mode, source: state.source, revision: state.catalogue.revision }));
 $('filter').addEventListener('change', event => { if (event.target.value) command('filter', event.target.value); });
 $('toggle-queue').addEventListener('click', async () => {
   const result = await command('compact', !compact);

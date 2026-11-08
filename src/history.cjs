@@ -10,8 +10,8 @@ class History {
     this.revision++;
   }
   record(track) {
-    const { id, kind, title, artist, album, duration } = track;
-    const row = { id, kind, title, artist, album, duration, playedAt: new Date().toISOString() };
+    const { id, kind, title, artist, album, duration, spotifyId } = track;
+    const row = { id, kind, title, artist, album, duration, spotifyId, playedAt: new Date().toISOString() };
     this.items = [row, ...this.items.filter(item => item.id !== id)].slice(0, 1000);
     this.revision++;
     const data = JSON.stringify(this.items);

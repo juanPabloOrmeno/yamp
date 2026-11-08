@@ -3,6 +3,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 function executable(name) {
+  if (process.platform === 'win32' && !name.endsWith('.exe')) name += '.exe';
   const candidates = [
     process.resourcesPath && path.join(process.resourcesPath, 'bin', name),
     path.join(os.homedir(), '.local', 'bin', name),
@@ -16,7 +17,9 @@ function executable(name) {
 }
 
 function chromeExecutable() {
-  return (process.platform === 'darwin' ? [
+  return (process.platform === 'win32' ? [
+    process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA
+  ].filter(Boolean).map(dir => path.join(dir, 'Google', 'Chrome', 'Application', 'chrome.exe')) : process.platform === 'darwin' ? [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     path.join(os.homedir(), 'Applications/Google Chrome.app/Contents/MacOS/Google Chrome')
   ] : ['/usr/bin/google-chrome-stable', '/usr/bin/google-chrome', '/opt/google/chrome/google-chrome']).find(existsSync);

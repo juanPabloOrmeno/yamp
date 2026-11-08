@@ -10,7 +10,7 @@
 <body>
   <main class="chassis">
     <header class="titlebar">
-      <span class="bolt">ϟ</span><span class="grooves"></span><h1>YAMP <span>· YOUTUBE MUSIC</span></h1><span class="grooves"></span>
+      <span class="bolt">ϟ</span><span class="grooves"></span><h1>YAMP <span id="source-title">· YOUTUBE MUSIC</span></h1><span class="grooves"></span>
       <button data-action="pin" id="pin" title="Siempre encima" aria-label="Siempre encima">◆</button>
       <button data-action="minimize" title="Minimizar" aria-label="Minimizar">_</button>
       <button data-action="close" title="Salir" aria-label="Salir">×</button>
@@ -30,16 +30,53 @@
       <div class="message" id="message" role="status"></div>
     </section>
     <section class="playlist" id="playlist" aria-label="Cola de reproducción">
-      <div class="section-title"><span class="grooves"></span><h2 id="list-title">CATÁLOGO</h2><span class="grooves"></span><span id="count">00</span></div>
-      <form id="search-form"><input id="search" type="search" placeholder="Buscar en YouTube Music…" aria-label="Buscar música" maxlength="300" required><button type="submit" title="Buscar">⌕</button></form>
+      <div class="section-title"><span class="grooves"></span><h2 id="list-title">CATÁLOGO</h2><span class="grooves"></span><button id="show-libraries">LIBRERÍAS</button><span id="count">00</span></div>
+      <form id="search-form"><select id="source" aria-label="Fuente de datos"><option value="youtube">YouTube</option><option value="spotify">Spotify</option></select><input id="search" type="search" placeholder="Buscar en YouTube Music…" aria-label="Buscar música" maxlength="300" required><button type="submit" title="Buscar">⌕</button></form>
       <nav class="catalogue-nav"><button data-action="show-queue">COLA</button><button data-action="history">HISTORIAL</button><button data-action="home">INICIO</button><button data-action="library">BIBLIOTECA</button><button data-action="local" title="Canciones guardadas sin conexión">LOCAL</button><select id="filter" aria-label="Filtrar biblioteca" hidden></select><button data-action="more" id="more" hidden title="Cargar más resultados">MÁS</button></nav>
       <div id="queue-actions" hidden><button id="save-playlist">GUARDAR PLAYLIST</button><button id="clear-queue" data-action="clear-queue">LIMPIAR COLA</button></div>
       <div id="list-actions" hidden><button id="enqueue-all">AGREGAR TODO A LA COLA</button><button id="clear-history" data-action="clear-history" hidden>BORRAR HISTORIAL</button></div>
       <ol id="queue"></ol>
       <div id="empty">TU PRÓXIMA OBSESIÓN EMPIEZA AQUÍ.<br><span>Busca música o abre tu biblioteca.</span></div>
-      <footer><button data-action="login" title="Chrome se usa únicamente para iniciar sesión">CUENTA ↗</button><button data-action="save-session" id="save-session" hidden title="Guardar la sesión y cerrar Chrome">GUARDAR SESIÓN</button><button id="manage-local" title="Administrar canciones guardadas">ADMINISTRAR</button><button id="show-playlists">PLAYLISTS</button><span>AUDIO NATIVO <b>0.2</b></span></footer>
+      <footer><button id="account" title="Conectar cuenta de la fuente seleccionada">CUENTA ↗</button><button data-action="save-session" id="save-session" hidden title="Guardar la sesión y cerrar Chrome">GUARDAR SESIÓN</button><button id="manage-local" title="Administrar canciones guardadas">ADMINISTRAR</button><button id="show-playlists">PLAYLISTS</button><span>AUDIO NATIVO <b>0.2</b></span></footer>
     </section>
   </main>
+  <dialog id="libraries-dialog" aria-labelledby="libraries-title">
+    <header class="manager-heading"><h2 id="libraries-title">LIBRERÍAS LOCALES</h2><button id="close-libraries" aria-label="Cerrar librerías">×</button></header>
+    <p>Colecciones propias con canciones de cualquier fuente. El audio se comparte entre librerías.</p>
+    <form id="library-create-form" class="playlist-name-row"><input id="library-new-name" aria-label="Nombre de nueva librería" placeholder="Nueva librería…" maxlength="100" required><button id="library-create">CREAR</button></form>
+    <select id="library-select" aria-label="Librería local"></select>
+    <p id="library-add-hint">Crea o selecciona una librería para añadir canciones desde la cola o la lista visible.</p>
+    <button id="library-add-track" hidden>AÑADIR ESTA CANCIÓN</button>
+    <div id="library-details" hidden>
+      <form id="library-rename-form" class="playlist-name-row"><input id="library-name" aria-label="Nombre de la librería" maxlength="100" required><button id="library-rename">RENOMBRAR</button><button type="button" id="library-delete">ELIMINAR</button></form>
+      <p id="library-summary"></p>
+      <div class="library-buttons"><button id="library-add-queue">AÑADIR COLA</button><button id="library-add-view">AÑADIR LISTA VISIBLE</button><button id="library-download">GUARDAR AUDIO</button></div>
+      <label class="select-all"><input id="library-select-all" type="checkbox"> Seleccionar todas</label>
+      <div id="library-tracks"></div>
+      <div class="library-buttons"><button id="library-remove-tracks">QUITAR SELECCIONADAS</button><button id="library-load">CARGAR COLA</button><button id="library-enqueue">AÑADIR A COLA</button></div>
+      <p>Quitar canciones o eliminar una librería conserva el audio en LOCAL. Cargar reemplaza la cola actual.</p>
+    </div>
+    <p id="libraries-message" role="status"></p><p id="libraries-progress" role="status"></p>
+  </dialog>
+  <dialog id="spotify-dialog" aria-labelledby="spotify-title">
+    <header class="manager-heading"><h2 id="spotify-title">CUENTA SPOTIFY</h2><button id="close-spotify" aria-label="Cerrar cuenta Spotify">×</button></header>
+    <p>Inicia sesión en el navegador y autoriza YAMP. Volverás a tener tu biblioteca aquí automáticamente.</p>
+    <form id="spotify-form">
+      <details id="spotify-setup" open>
+        <summary>Configuración inicial · solo una vez</summary>
+        <p>Spotify requiere el Client ID de una aplicación para conectar tu cuenta. No necesitas Client Secret.</p>
+        <button type="button" data-action="spotify-setup">1. ABRIR SPOTIFY DEVELOPERS ↗</button>
+        <p>Crea una aplicación y registra esta Redirect URI:</p>
+        <p class="selectable">http://127.0.0.1:43821/callback</p>
+        <button type="button" id="spotify-copy-redirect">2. COPIAR REDIRECT URI</button>
+        <label class="playlist-name-row" for="spotify-client">3. Pega el Client ID de la aplicación</label>
+        <div class="playlist-name-row"><input id="spotify-client" required pattern="[a-fA-F0-9]{32}" maxlength="32" autocomplete="off" placeholder="Client ID"></div>
+      </details>
+      <button id="spotify-connect">INICIAR SESIÓN EN SPOTIFY ↗</button>
+    </form>
+    <p>Spotify aporta el catálogo y tu biblioteca. El audio se reproduce desde una coincidencia en YouTube Music; puede ser otra edición.</p>
+    <p id="spotify-message" role="status"></p><button id="spotify-disconnect">DESCONECTAR</button>
+  </dialog>
   <dialog id="playlists-dialog" aria-labelledby="playlists-title">
     <header class="manager-heading"><h2 id="playlists-title">MIS PLAYLISTS · YAMP</h2><button id="close-playlists" aria-label="Cerrar playlists">×</button></header>
     <form id="playlist-form"><label for="playlist-name">Guardar la cola actual como playlist</label><div class="playlist-name-row"><input id="playlist-name" required maxlength="100" placeholder="Nombre de la playlist"><button id="confirm-playlist" type="submit">GUARDAR</button></div></form>

@@ -16,7 +16,7 @@ function resolveAudio(id, directory, signal) {
   if (existsSync(cookies)) args.push('--cookies', cookies);
   args.push(`https://music.youtube.com/watch?v=${id}`);
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { stdio: ['ignore', 'pipe', 'ignore'], signal, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } });
+    const child = spawn(executable, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'], signal, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } });
     let output = '', finished = false;
     const timeout = setTimeout(() => { child.kill('SIGTERM'); finish(new Error('La canción tardó demasiado. Intenta otra o renueva tu sesión.')); }, 60000);
     function finish(error, result) {
