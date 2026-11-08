@@ -65,7 +65,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
       - run: bash gradlew :app:assembleDebug
         working-directory: android
@@ -111,9 +110,9 @@ jobs:
           | Windows 10/11, x64 | `windows-x64-setup.exe` |
           | macOS, Apple Silicon | `mac-arm64.dmg` |
           | macOS, Intel | `mac-x64.dmg` |
-          | Linux, x64 (portable) | `linux-x64.AppImage` |
-          | Debian / Ubuntu, x64 | `linux-x64.deb` |
-          | Fedora / derivados, x64 | `linux-x64.rpm` |
+          | Linux, x64 (portable) | `linux-x86_64.AppImage` |
+          | Debian / Ubuntu, x64 | `linux-amd64.deb` |
+          | Fedora / derivados, x64 | `linux-x86_64.rpm` |
 
           Windows y macOS incluyen mpv y yt-dlp. En Linux se requieren mpv y yt-dlp; los paquetes DEB/RPM declaran esas dependencias. Para AppImage, instálalos con el gestor de paquetes y otorga permiso de ejecución al archivo.
 

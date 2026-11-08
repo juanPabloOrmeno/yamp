@@ -55,7 +55,7 @@ test('Spotify refreshes once for concurrent requests and persists rotated creden
   await Promise.all([spotify.api('me/tracks'), spotify.api('me/albums')]);
   assert.equal(refreshes, 1);
   assert.equal(JSON.parse(await fs.readFile(spotify.file)).refresh_token, 'rotated');
-  assert.equal((await fs.stat(spotify.file)).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') assert.equal((await fs.stat(spotify.file)).mode & 0o777, 0o600);
   await spotify.disconnect();
   await assert.rejects(spotify.api('me/tracks'), /CUENTA/);
   assert.ok(!JSON.parse(await fs.readFile(spotify.file)).refresh_token);
